@@ -6,14 +6,34 @@ import (
 	"github.com/muir/nject"
 )
 
-// RunMatrix uses t.Run() to fork into multiple threads of execution for each
+// RunParallelMatrix uses t.Run() to fork into multiple threads of execution for each
 // sub-test before any chains are evaluated. This forces the chains to share
-// nothing between them. RunMatrixTest does not provide any default injectors
-// other than a *testing.T.
+// nothing between them. RunParallelMatrix does not provide any default injectors
+// other than a *testing.T that comes from a named provider (named "testing.T")
 //
 // A matrix is a specific type: map[string]nject.Provider. Add those to the
 // chain to trigger matrix testing.
-func RunMatrixTest(t *testing.T, chain ...any) {
+//
+// t.Parallel() is used for each t.Run()
+//
+// A warning about t.Parallel(): inner tests wait until outer tests finish.
+// See https://go.dev/play/p/ZDaw054HeIN
+func RunParallelMatrix(t *testing.T, chain ...any) {
+	runMatrixTest(t, true, chain)
+}
+
+// RunMatrix uses t.Run() separate execution for each
+// sub-test before any chains are evaluated. This forces the chains to share
+// nothing between them. RunMatrix does not provide any default injectors
+// other than a *testing.T that comes from a named provider (named "testing.T")
+//
+// A matrix is a specific type: map[string]nject.Provider. Add those to the
+// chain to trigger matrix testing.
+func RunMatrix(t *testing.T, chain ...any) {
+	runMatrixTest(t, false, chain)
+}
+
+func runMatrixTest(t *testing.T, parallel bool, chain []any) {
 	breakChain := func(t *testing.T, chain []any) (matrix map[string]nject.Provider, before []any, after []any) {
 		for i, injector := range chain {
 			matrix, ok := injector.(map[string]nject.Provider)
@@ -36,7 +56,11 @@ func RunMatrixTest(t *testing.T, chain ...any) {
 	var startTest func(t *testing.T, matrix map[string]nject.Provider, before []any, after []any)
 	startTest = func(t *testing.T, matrix map[string]nject.Provider, before []any, after []any) {
 		for name, subChain := range matrix {
+			subChain := subChain
 			t.Run(name, func(t *testing.T) {
+				if parallel {
+					t.Parallel()
+				}
 				matrix, newBefore, newAfter := breakChain(t, after)
 				if matrix == nil {
 					RunTest(t, combineSlices(testingT(t), before, []any{subChain}, after)...)
