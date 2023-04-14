@@ -11,12 +11,12 @@ Install:
 
 ---
 
-Ntest is a collection of a few functions that aid in writing tests using 
+Ntest is a collection of a few functions that aid in writing tests using
 [nject](http://github.com/muir/nject).
 
 ## Testing with nject
 
-[Nject](http://github.com/muir/nject) 
+[Nject](http://github.com/muir/nject)
 operates by being given a list of functions.  The last function in the list gets
 called.  Other functions may also be called in order to create the types that the last
 function takes as parameters.
@@ -27,7 +27,7 @@ An example:
 
 func TestExample(t *testing.T) {
 	type databaseName string
-	ntest.RunTest(t, 
+	ntest.RunTest(t,
 		context.Background,	// returns context.Contex
 		getLogger,		// a function that returns a Logger
 		func() databaseName {
@@ -120,9 +120,22 @@ func IntegrationTest(t T, chain ...interface{}) {
 }
 ```
 
-## Additional suggestions for how to use nject to write tests
+# Additional suggestions for how to use nject to write tests
 
-### Cleanup
+## Library of injectors
+
+The first, and primary step is to simply build a bunch of injectors to build things that
+are needed for tests. If these things do not require configuration, then that's straightforward.
+
+Easy examples are database connections, clients for services, etc.
+
+## Sequences of injectors
+
+Package up the injectors into collections that are used together so that when the types needed
+to create an existing type change, the additional injector is included in everyone's code without
+needeing to make any per-test changes.
+
+## Cleanup
 
 Any injector that provides something that must be cleaned up afterwards should
 arrange for the cleanup itself.
@@ -132,15 +145,14 @@ This is easily handled with `t.Cleanup()`
 ## Abort vs nject.TerminalError
 
 If the injection chains used in tests are only used in tests, then when
-something goes wrong in an injector, it can simply abort the test.
+something goes wrong in an injector, it can simply abort (`t.FailNow()`) the test.
 
-If the injection chains are shared with production code, then instead
-of aborting, injectors can return `nject.TerminalError` to abort the
+If the injection chains are shared with non-test code, then instead
+of aborting, injectors can return
+[nject.TerminalError](https://pkg.go.dev/github.com/muir/nject#TerminalError) to abort the
 test that way.
 
-### Overriding defaults
-
-There are often functions that need default parameters.
+## Override-default pattern
 
 The easiest pattern to follow for allowing the defaults to be overridden some
 of the time is to provide the defaults with a named injector and then
@@ -161,8 +173,8 @@ var Database = nject.Sequence("open database",
 )
 
 func OverrideDSN(dsn string) nject.Provider {
-	return nject.ReplaceNamed("default-dsn", 
-		func() databaseDSN { 
+	return nject.ReplaceNamed("default-dsn",
+		func() databaseDSN {
 			return databaseDSN(dsn)
 		})
 }
@@ -173,9 +185,9 @@ different DSN for your test, you can use `OverrideDSN` in the injection chain.  
 allows `Database` to be included in default chains that are always placed before
 test-specific chains.
 
-### Inserting extra in the middle of an injection sequence
+## Inserting `Extra` in the middle of an injection sequence
 
-As mentioned in the docs for [Extra](https://pkg.go.dev/github.com/memsql/ntest#Extra), 
+As mentioned in the docs for [Extra](https://pkg.go.dev/github.com/memsql/ntest#Extra),
 sometimes you need to insert the call to Extra at specific spots in your injection chain.
 
 For example, suppose you have a pattern where you are build something complicated
@@ -193,7 +205,7 @@ var Chain := nject.Sequence("chain",
 ```
 
 Now, if you wanted an extra couple of type Bs that each come
-from distinct typeAs, you'll have to rebuild your chain. 
+from distinct typeAs, you'll have to rebuild your chain.
 
 First name your injectors:
 
@@ -221,7 +233,52 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-### Passing functions around
+## Custom sequence pattern
+
+The custom sequence pattern works well when there is no default value and thus you
+cannot include builders in the standard injector sequences.
+
+Customer sequences are also appropriate for situations where you're supporting just
+one or two tests.
+
+The basic idea is to build a sequence that includes customization:
+
+```go
+func createSomethingForMyTest(parameter1 type1, parameter2 type2, etc) *nject.Collection {
+	return nject.Sequence("createSomething",
+		injector(s),
+		func(stuff, from chain) {
+			// code that uses parameter1, parameter2, etc
+		},
+		moreInjector(s),
+	)
+}
+```
+
+The custom sequence pattern is also useful for pre-built sequences for `Extra`.  In that
+case, the parameters are pointers.  In the example below, the parameters to customize the
+extra thing are injectors.
+
+```go
+func ExtraThing(tp *Thing, overrides ...any) nject.Provider
+	return nject.InsertAfterNamed("some-injector",
+		ntest.Extra(
+			nject.Required(nject.Sequence("extra-thing-overrides", overrides...)),
+			tp))
+
+func TestSomething(t *testing.T) {
+	var thing1 Thing
+	var thing2 Thing
+	ntest.RunTest(t, standardInjectorChain,
+		ExtraThing(&thing1, thingParameterType("thing1")),
+		ExtraThing(&thing1, thingParameterType("thing2")),
+		func(stuff, from chain) {
+			testWith(stuff, and, thing1, and, thing2)
+		},
+	)
+```
+
+## Passing functions around
 
 Nject does not allow anonymous functions to be arguments or returned from injectors.
 
