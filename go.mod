@@ -3,7 +3,7 @@ module github.com/memsql/ntest
 go 1.18
 
 require (
-	github.com/muir/nject v1.6.0
+	github.com/muir/nject v1.7.1
 	github.com/stretchr/testify v1.8.2
 )
 
