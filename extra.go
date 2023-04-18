@@ -7,13 +7,13 @@ import (
 )
 
 // Extra is a means to obtain more than one of something needed
-// for a test.  
+// for a test.
 //
 // The extra bits may be need to be created in the middle of a
 // pre-made injection sequence. The easiest way to handle that is
-// to use `nject.Provide()` to name the injectors in the injection
-// chain.  Then you can use `nject.InsertAfterNamed()` to wrap
-// the `Extra()` to "move" the effective location of the Extra.
+// to use nject.Provide() to name the injectors in the injection
+// chain.  Then you can use nject.InsertAfterNamed() to wrap
+// the Extra() to "move" the effective location of the Extra.
 //
 // Alternatively, you can avoid the pre-made injection sequences
 // so that you explicitly add Extra in the middle.
