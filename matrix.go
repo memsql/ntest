@@ -19,6 +19,7 @@ import (
 // A warning about t.Parallel(): inner tests wait until outer tests finish.
 // See https://go.dev/play/p/ZDaw054HeIN
 func RunParallelMatrix(t *testing.T, chain ...any) {
+	t.Parallel()
 	runMatrixTest(t, true, chain)
 }
 
