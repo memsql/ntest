@@ -116,7 +116,7 @@ var IntegrationSequence = nject.Sequence("integration,
 func IntegrationTest(t T, chain ...interface{}) {
 	RunTest(t,
 		integrationSequence,
-		chain...)
+		nject.Sequence("chain", chain...))
 }
 ```
 
