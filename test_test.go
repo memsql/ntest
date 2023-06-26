@@ -119,3 +119,14 @@ func TestExtra(t *testing.T) {
 	)
 	assert.Equal(t, 7, c)
 }
+
+func TestEmptyMatrix(t *testing.T) {
+	t.Skip("this test is expected to fail")
+	t.Parallel()
+	ntest.RunMatrix(t,
+		func() int { return 7 },
+		func(t *testing.T, i int) {
+			assert.Equal(t, 7, i)
+		},
+	)
+}

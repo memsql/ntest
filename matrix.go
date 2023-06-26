@@ -18,6 +18,9 @@ import (
 //
 // A warning about t.Parallel(): inner tests wait until outer tests finish.
 // See https://go.dev/play/p/ZDaw054HeIN
+//
+// Matrix values must be direct arguments to RunMatrix -- they will not be extracted
+// from nject.Sequences. RunParallelMatrix will fail if there is no matrix provided.
 func RunParallelMatrix(t *testing.T, chain ...any) {
 	t.Parallel()
 	runMatrixTest(t, true, chain)
@@ -30,6 +33,9 @@ func RunParallelMatrix(t *testing.T, chain ...any) {
 //
 // A matrix is a specific type: map[string]nject.Provider. Add those to the
 // chain to trigger matrix testing.
+//
+// Matrix values must be direct arguments to RunMatrix -- they will not be extracted
+// from nject.Sequences. RunMatrix will fail if there is no matrix provided.
 func RunMatrix(t *testing.T, chain ...any) {
 	runMatrixTest(t, false, chain)
 }
@@ -50,7 +56,8 @@ func runMatrixTest(t *testing.T, parallel bool, chain []any) {
 
 	matrix, before, after := breakChain(t, chain)
 	if matrix == nil {
-		RunTest(t, combineSlices(testingT(t), chain)...)
+		t.Log("No matrix found in matrix testing, perhaps the specifier is in a Sequence? (not allowed)")
+		t.Fail()
 		return
 	}
 
