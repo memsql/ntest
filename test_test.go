@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memsql/ntest"
 	"github.com/muir/nject"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/memsql/ntest"
 )
 
 func TestRun(t *testing.T) {
