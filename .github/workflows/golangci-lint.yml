@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@63c24ba6bd7ba022e95695ff85de572c04a18142
+        uses: step-security/harden-runner@0d381219ddf674d61a7572ddd19d7941e271515c
         with:
           egress-policy: audit # TODO: change to 'egress-policy: block' after couple of runs
 
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@82d40c283aeb1f2b6595839195e95c2d6a49081b
+        uses: golangci/golangci-lint-action@a4f60bb28d35aeee14e6880718e0c85ff1882e64
         with:
           # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
           version: latest
