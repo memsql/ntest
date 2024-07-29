@@ -285,5 +285,5 @@ Nject does not allow anonymous functions to be arguments or returned from inject
 Most of the time, this does not matter because you generally do not need to pass functions
 around inside an injection chain. Just let functions run.
 
-If you do need to pass a function, you still can, but you have to give it a named typed.
+If you do need to pass a function, you still can, but you have to give it a named type.
 
