@@ -3,7 +3,7 @@ package ntest
 import (
 	"reflect"
 
-	"github.com/muir/nject"
+	"github.com/muir/nject/v2"
 )
 
 // Extra is a means to obtain more than one of something needed
