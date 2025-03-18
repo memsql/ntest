@@ -3,7 +3,7 @@ package ntest
 import (
 	"testing"
 
-	"github.com/muir/nject"
+	"github.com/muir/nject/v2"
 )
 
 // RunParallelMatrix uses t.Run() to fork into multiple threads of execution for each
