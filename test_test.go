@@ -30,8 +30,33 @@ func TestRun(t *testing.T) {
 	assert.True(t, called)
 }
 
-func TestParallelMatrix(t *testing.T) {
+func TestParallelMatrixTestingT(t *testing.T) {
+	testParallelMatrix(t)
+}
+
+func TestParallelMatrixExtraDetail(t *testing.T) {
+	testParallelMatrix(ntest.ExtraDetailLogger(t, "TPMED-"))
+}
+
+func TestParallelMatrixBuffered(t *testing.T) {
+	testRunTBasic(ntest.BufferedLogger(t))
+}
+
+func testRunTBasic(runT ntest.RunT[ntest.T]) {
+	// Simple test to verify RunT[T] functionality works
+	var ran bool
+	success := runT.Run("subtest", func(subT ntest.T) {
+		subT.Log("This is a subtest")
+		ran = true
+	})
+	if !success || !ran {
+		runT.Fatal("RunT functionality failed")
+	}
+}
+
+func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
 	var mu sync.Mutex
+	name := t.Name()
 	doneA := make(chan struct{})
 	doneB := make(chan struct{})
 	testsRun := make(map[string]struct{})
@@ -49,7 +74,7 @@ func TestParallelMatrix(t *testing.T) {
 				},
 			),
 		},
-		func(t *testing.T, s string, c chan struct{}) {
+		func(t ET, s string, c chan struct{}) {
 			t.Logf("final func for %s", t.Name())
 			t.Logf("s = %s", s)
 			mu.Lock()
@@ -58,7 +83,7 @@ func TestParallelMatrix(t *testing.T) {
 			close(c)
 		},
 	)
-	t.Run("validate", func(t *testing.T) {
+	t.Run("validate", func(t ET) {
 		t.Parallel()
 		select {
 		case <-doneA:
@@ -71,8 +96,8 @@ func TestParallelMatrix(t *testing.T) {
 			require.False(t, true, "timeout")
 		}
 		assert.Equal(t, map[string]struct{}{
-			"TestParallelMatrix/testA": {},
-			"TestParallelMatrix/testB": {},
+			name + "/testA": {},
+			name + "/testB": {},
 		}, testsRun)
 	})
 }

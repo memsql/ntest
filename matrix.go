@@ -1,8 +1,6 @@
 package ntest
 
 import (
-	"testing"
-
 	"github.com/muir/nject/v2"
 )
 
@@ -21,7 +19,7 @@ import (
 //
 // Matrix values must be direct arguments to RunMatrix -- they will not be extracted
 // from nject.Sequences. RunParallelMatrix will fail if there is no matrix provided.
-func RunParallelMatrix(t *testing.T, chain ...any) {
+func RunParallelMatrix[GT RunT[GT]](t GT, chain ...any) {
 	t.Parallel()
 	runMatrixTest(t, true, chain)
 }
@@ -36,12 +34,12 @@ func RunParallelMatrix(t *testing.T, chain ...any) {
 //
 // Matrix values must be direct arguments to RunMatrix -- they will not be extracted
 // from nject.Sequences. RunMatrix will fail if there is no matrix provided.
-func RunMatrix(t *testing.T, chain ...any) {
+func RunMatrix[GT RunT[GT]](t GT, chain ...any) {
 	runMatrixTest(t, false, chain)
 }
 
-func runMatrixTest(t *testing.T, parallel bool, chain []any) {
-	breakChain := func(t *testing.T, chain []any) (matrix map[string]nject.Provider, before []any, after []any) {
+func runMatrixTest[GT RunT[GT]](t GT, parallel bool, chain []any) {
+	breakChain := func(t GT, chain []any) (matrix map[string]nject.Provider, before []any, after []any) {
 		for i, injector := range chain {
 			matrix, ok := injector.(map[string]nject.Provider)
 			if ok {
@@ -50,8 +48,8 @@ func runMatrixTest(t *testing.T, parallel bool, chain []any) {
 		}
 		return nil, nil, chain
 	}
-	testingT := func(t *testing.T) []any {
-		return []any{nject.Provide("testing.T", func() *testing.T { return t })}
+	testingT := func(t GT) []any {
+		return []any{nject.Provide("testing.T", func() GT { return t })}
 	}
 
 	matrix, before, after := breakChain(t, chain)
@@ -61,11 +59,11 @@ func runMatrixTest(t *testing.T, parallel bool, chain []any) {
 		return
 	}
 
-	var startTest func(t *testing.T, matrix map[string]nject.Provider, before []any, after []any)
-	startTest = func(t *testing.T, matrix map[string]nject.Provider, before []any, after []any) {
+	var startTest func(t GT, matrix map[string]nject.Provider, before []any, after []any)
+	startTest = func(t GT, matrix map[string]nject.Provider, before []any, after []any) {
 		for name, subChain := range matrix {
 			subChain := subChain
-			t.Run(name, func(t *testing.T) {
+			t.Run(name, func(t GT) {
 				if parallel {
 					t.Parallel()
 				}
