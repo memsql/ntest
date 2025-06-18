@@ -112,12 +112,14 @@ func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expect
 	expectedLine := strconv.Itoa(logLine)
 
 	t.Logf("Looking for line number: %s", expectedLine)
-	for _, log := range mockT.captured {
-		t.Logf("examining: %s", log)
-		if strings.Contains(log, "Test message for line accuracy") && strings.Contains(log, "logger_test.go:"+expectedLine) && strings.Contains(log, "Test message for line accuracy") {
-			found = true
-			t.Logf("✓ Found log message with correct line number: %s", log)
-			break
+	for _, entry := range mockT.captured {
+		for _, log := range strings.Split(entry, "\n") {
+			t.Logf("examining: %s", log)
+			if strings.Contains(log, "Test message for line accuracy") && strings.Contains(log, "logger_test.go:"+expectedLine) && strings.Contains(log, "Test message for line accuracy") && !strings.Contains(log, "logger.go:") {
+				found = true
+				t.Logf("✓ Found log message with correct line number: %s", log)
+				break
+			}
 		}
 	}
 
