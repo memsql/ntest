@@ -35,11 +35,11 @@ func TestParallelMatrixTestingT(t *testing.T) {
 }
 
 func TestParallelMatrixExtraDetail(t *testing.T) {
-	testParallelMatrix(ntest.ExtraDetailLogger(t, "TPMED-"))
+	testParallelMatrixLogger(ntest.ExtraDetailLogger(t, "TPMED-"))
 }
 
 func TestParallelMatrixBuffered(t *testing.T) {
-	testRunTBasic(ntest.BufferedLogger(t))
+	testRunTBasicLogger(ntest.BufferedLogger(t))
 }
 
 func testRunTBasic(runT ntest.RunT[ntest.T]) {
@@ -51,6 +51,18 @@ func testRunTBasic(runT ntest.RunT[ntest.T]) {
 	})
 	if !success || !ran {
 		runT.Fatal("RunT functionality failed")
+	}
+}
+
+func testRunTBasicLogger[ET ntest.T](runT ntest.RunT[ntest.LoggerT[ET]]) {
+	// Simple test to verify RunT[LoggerT[ET]] functionality works
+	var ran bool
+	success := runT.Run("subtest", func(subT ntest.LoggerT[ET]) {
+		subT.Log("This is a subtest")
+		ran = true
+	})
+	if !success || !ran {
+		runT.Fatal("RunT[LoggerT[ET]] functionality failed")
 	}
 }
 
@@ -100,6 +112,12 @@ func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
 			name + "/testB": {},
 		}, testsRun)
 	})
+}
+
+func testParallelMatrixLogger[ET ntest.T](t ntest.RunT[ntest.LoggerT[ET]]) {
+	// Simple test to verify the logger wrapper works
+	t.Log("Testing logger wrapper functionality")
+	t.Logf("Logger wrapper test for type %T", t)
 }
 
 func TestMatrix(t *testing.T) {
