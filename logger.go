@@ -16,15 +16,66 @@ type LoggerT[ET T] struct {
 	skipFrames int // Additional skip frames for nested wrappers
 }
 
+// ReplaceLoggerT directly implements T interface to avoid double LoggerT wrapping
+type ReplaceLoggerT[ET T] struct {
+	runTHelper
+	orig   ET
+	logger func(string)
+}
+
 // ReplaceLogger creates a logger wrapper that overrides the logging function.
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
-	wrapped := LoggerT[ET]{
-		runTHelper: runTHelper{T: t}, // Set the embedded helper
-		orig:       t,                // Keep reference to original
+	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
+	// the extra call frames: ReplaceLoggerT.Log -> custom logger function -> underlying logger call
+	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
+		adjuster.AdjustSkipFrames(2) // +2 for ReplaceLoggerT.Log and the custom logger function
+	}
+
+	wrapped := &ReplaceLoggerT[ET]{
+		runTHelper: runTHelper{T: t},
+		orig:       t,
 		logger:     logger,
-		skipFrames: 0, // Initialize skip frames
 	}
 	return any(wrapped).(T)
+}
+
+func (t ReplaceLoggerT[ET]) Log(args ...interface{}) {
+	line := fmt.Sprintln(args...)
+	message := line[0 : len(line)-1]
+	t.logger(message)
+}
+
+func (t ReplaceLoggerT[ET]) Logf(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	t.logger(message)
+}
+
+// Run implements the new RunT interface
+func (t ReplaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
+	if runnable, ok := any(t.orig).(interface {
+		Run(string, func(*testing.T)) bool
+	}); ok {
+		return runnable.Run(name, f)
+	}
+	t.T.Logf("Run not supported by %T", t.orig)
+	t.T.FailNow()
+	return false
+}
+
+// ReWrap implements ReWrapper to recreate ReplaceLoggerT with fresh *testing.T
+func (t ReplaceLoggerT[ET]) ReWrap(newT *testing.T) T {
+	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
+		rewrapped := reWrapper.ReWrap(newT)
+		return ReplaceLogger(rewrapped, t.logger)
+	}
+	return ReplaceLogger(newT, t.logger)
+}
+
+// AdjustSkipFrames forwards to the underlying logger if it supports it
+func (t *ReplaceLoggerT[ET]) AdjustSkipFrames(skip int) {
+	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
+		adjuster.AdjustSkipFrames(skip)
+	}
 }
 
 func (t LoggerT[ET]) Log(args ...interface{}) {
