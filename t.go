@@ -1,5 +1,7 @@
 package ntest
 
+import "testing"
+
 // T is subset of what testing.T provides and is also a subset of
 // of what ginkgo.GinkgoT() provides.  This interface is probably
 // richer than strictly required so more could be removed from it
@@ -22,27 +24,29 @@ type T interface {
 	Skipped() bool
 }
 
-type RunT[GT T] interface {
+type RunT interface {
 	T
-	Run(string, func(GT)) bool
-	Fail()
+	Run(string, func(*testing.T)) bool
 	Parallel()
 }
 
-// NewTestRunner creates a test runner that works with matrix testing from any RunT[T] type.
-// This is useful for converting wrapper types to work with matrix testing functions.
-func NewTestRunner[ET T](t RunT[ET]) RunT[T] {
-	return tRunWrapper[ET]{inner: t}
+// NewTestRunner creates a test runner that works with matrix testing.
+// This is useful for converting T types to work with matrix testing functions.
+func NewTestRunner(t T) RunT {
+	if runT, ok := t.(RunT); ok {
+		return runT
+	}
+	return simpleRunT{T: t, orig: t}
 }
 
 // simpleRunT provides RunT functionality for plain T types
-type simpleRunT[ET T] struct {
-	runTHelper
-	orig ET
+type simpleRunT struct {
+	T
+	orig T
 }
 
-func (s simpleRunT[ET]) Run(name string, f func(ET)) bool {
-	if runT, ok := any(s.orig).(RunT[ET]); ok {
+func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
+	if runT, ok := s.orig.(RunT); ok {
 		return runT.Run(name, f)
 	}
 	s.T.Logf("Run not supported by %T", s.orig)
@@ -50,25 +54,28 @@ func (s simpleRunT[ET]) Run(name string, f func(ET)) bool {
 	return false
 }
 
-// tRunWrapper wraps any RunT[WT] to implement RunT[T]
-type tRunWrapper[WT T] struct {
+func (s simpleRunT) Parallel() {
+	if parallel, ok := s.orig.(interface{ Parallel() }); ok {
+		parallel.Parallel()
+	}
+}
+
+// tRunWrapper wraps any RunT to implement RunT
+type tRunWrapper struct {
 	T
-	inner RunT[WT]
+	inner RunT
 }
 
-func (w tRunWrapper[WT]) Run(name string, f func(T)) bool {
-	return w.inner.Run(name, func(wt WT) {
-		f(wt) // WT satisfies T, so this works
-	})
+func (w tRunWrapper) Run(name string, f func(*testing.T)) bool {
+	return w.inner.Run(name, f)
 }
 
-func (w tRunWrapper[WT]) Fail()     { w.inner.Fail() }
-func (w tRunWrapper[WT]) Parallel() { w.inner.Parallel() }
+func (w tRunWrapper) Parallel() { w.inner.Parallel() }
 
 // AdjustSkipFrames forwards the skip frame adjustment to the inner wrapper if it supports it
 // tRunWrapper adds 0 frames (it just delegates all T methods directly)
-func (w tRunWrapper[WT]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := any(w.inner).(interface{ AdjustSkipFrames(int) }); ok {
+func (w tRunWrapper) AdjustSkipFrames(skip int) {
+	if adjuster, ok := w.inner.(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip) // +0 since tRunWrapper doesn't add any frames
 	}
 }

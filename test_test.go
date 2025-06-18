@@ -35,17 +35,17 @@ func TestParallelMatrixTestingT(t *testing.T) {
 }
 
 func TestParallelMatrixExtraDetail(t *testing.T) {
-	testParallelMatrixLogger(ntest.ExtraDetailLogger(t, "TPMED-"))
+	testParallelMatrixLogger(ntest.AsRunT(ntest.ExtraDetailLogger(t, "TPMED-")))
 }
 
 func TestParallelMatrixBuffered(t *testing.T) {
 	testRunTBasicLogger(ntest.AsRunT(ntest.BufferedLogger(t)))
 }
 
-func testRunTBasic(runT ntest.RunT[ntest.T]) {
-	// Simple test to verify RunT[T] functionality works
+func testRunTBasic(runT ntest.RunT) {
+	// Simple test to verify RunT functionality works
 	var ran bool
-	success := runT.Run("subtest", func(subT ntest.T) {
+	success := runT.Run("subtest", func(subT *testing.T) {
 		subT.Log("This is a subtest")
 		ran = true
 	})
@@ -54,19 +54,19 @@ func testRunTBasic(runT ntest.RunT[ntest.T]) {
 	}
 }
 
-func testRunTBasicLogger[ET ntest.T](runT ntest.RunT[ntest.LoggerT[ET]]) {
-	// Simple test to verify RunT[LoggerT[ET]] functionality works
+func testRunTBasicLogger(runT ntest.RunT) {
+	// Simple test to verify RunT functionality works
 	var ran bool
-	success := runT.Run("subtest", func(subT ntest.LoggerT[ET]) {
+	success := runT.Run("subtest", func(subT *testing.T) {
 		subT.Log("This is a subtest")
 		ran = true
 	})
 	if !success || !ran {
-		runT.Fatal("RunT[LoggerT[ET]] functionality failed")
+		runT.Fatal("RunT functionality failed")
 	}
 }
 
-func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
+func testParallelMatrix(t ntest.RunT) {
 	var mu sync.Mutex
 	name := t.Name()
 	doneA := make(chan struct{})
@@ -86,7 +86,7 @@ func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
 				},
 			),
 		},
-		func(t ET, s string, c chan struct{}) {
+		func(t *testing.T, s string, c chan struct{}) {
 			t.Logf("final func for %s", t.Name())
 			t.Logf("s = %s", s)
 			mu.Lock()
@@ -95,7 +95,7 @@ func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
 			close(c)
 		},
 	)
-	t.Run("validate", func(t ET) {
+	t.Run("validate", func(t *testing.T) {
 		t.Parallel()
 		select {
 		case <-doneA:
@@ -114,7 +114,7 @@ func testParallelMatrix[ET ntest.RunT[ET]](t ET) {
 	})
 }
 
-func testParallelMatrixLogger[ET ntest.T](t ntest.RunT[ntest.LoggerT[ET]]) {
+func testParallelMatrixLogger(t ntest.RunT) {
 	// Simple test to verify the logger wrapper works
 	t.Log("Testing logger wrapper functionality")
 	t.Logf("Logger wrapper test for type %T", t)

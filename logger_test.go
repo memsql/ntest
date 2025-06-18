@@ -59,6 +59,8 @@ func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	testLineNumberAccuracy(t, extraDetail, mockT, true, true) // expect buffering, test should fail to check line numbers
 }
 
+// TODO: test ReplaceLogger directly
+
 func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *testing.T) {
 	// Set environment variable to disable buffering
 	t.Setenv("NTEST_BUFFERING", "false")
