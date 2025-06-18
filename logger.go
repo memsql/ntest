@@ -24,7 +24,15 @@ type replaceLoggerT[ET T] struct {
 	logger func(string)
 }
 
-// ReplaceLogger creates a logger wrapper that overrides the logging function.
+// ReplaceLogger creates a logger wrapper that overrides the logging function. When layered
+// on top of BufferedLogger, it assumes that only one extra stack frame is added. If that's
+// not the case, cast and adjust:
+//
+//	if asf, ok := t.(interface{ AdjustSkipFrames(int) }); ok {
+//		asf.AdjustSkipFrames(2)
+//	}
+//
+// This adjustment should be done before using the the returned T
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
 	// the extra call frames: replaceLoggerT.Log -> custom logger function -> underlying logger call
@@ -129,7 +137,8 @@ func (t loggerT[ET]) ReWrap(newT *testing.T) T {
 }
 
 // ExtraDetailLogger creates a logger wrapper that adds both a
-// prefix and a timestamp to each line that is logged.
+// prefix and a timestamp to each line that is logged. A space after
+// the prefix is also added.
 func ExtraDetailLogger[ET T](t ET, prefix string) T {
 	return ReplaceLogger(t, func(s string) {
 		prefixedMessage := fmt.Sprintf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
@@ -214,7 +223,8 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 //
 // If the environment variable NTEST_BUFFERING is set to "false", buffering
 // will be turned off and the original T will be returned directly.
-// Returns T for direct use, or use AsRunT helper to convert to RunT[loggerT[T]] for matrix testing.
+//
+// Use AsRunT to upgrade the T into a RunT if using it with matrix tests.
 func BufferedLogger[ET T](t ET) T {
 	if os.Getenv("NTEST_BUFFERING") == "false" {
 		// When buffering is disabled, return the original T directly to avoid any intermediate calls

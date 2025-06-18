@@ -24,14 +24,21 @@ type T interface {
 	Skipped() bool
 }
 
+// RunT brings in more of the *testing.T API including Run and Parallel which are needed
+// for matrix tests.
+// *testing.T satisfies the RunT interface.
 type RunT interface {
 	T
 	Run(string, func(*testing.T)) bool
 	Parallel()
 }
 
-// NewTestRunner creates a test runner that works with matrix testing.
+// NewTestRunner creates a test runner that works with matrix testing by
+// upgrading a T to a RunT.
 // This is useful for converting T types to work with matrix testing functions.
+// If the concrete type underlying T doesn't implement Run then the
+// test will fail if Run is called. If the underlying type doesn't implement
+// Parallel, then the test won't be parallel.
 func NewTestRunner(t T) RunT {
 	if runT, ok := t.(RunT); ok {
 		return runT
