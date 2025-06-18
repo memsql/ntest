@@ -46,18 +46,6 @@ func TestParallelMatrixExtraBuffered(t *testing.T) {
 	testRunTBasicLogger(ntest.AsRunT(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-")))
 }
 
-func testRunTBasic(runT ntest.RunT) {
-	// Simple test to verify RunT functionality works
-	var ran bool
-	success := runT.Run("subtest", func(subT *testing.T) {
-		subT.Log("This is a subtest")
-		ran = true
-	})
-	if !success || !ran {
-		runT.Fatal("RunT functionality failed")
-	}
-}
-
 func testRunTBasicLogger(runT ntest.RunT) {
 	// Simple test to verify RunT functionality works
 	var ran bool

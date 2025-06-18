@@ -56,7 +56,9 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 	if runT, ok := s.orig.(RunT); ok {
 		return runT.Run(name, f)
 	}
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	s.T.Logf("Run not supported by %T", s.orig)
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	s.T.FailNow()
 	return false
 }
@@ -64,26 +66,6 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 func (s simpleRunT) Parallel() {
 	if parallel, ok := s.orig.(interface{ Parallel() }); ok {
 		parallel.Parallel()
-	}
-}
-
-// tRunWrapper wraps any RunT to implement RunT
-type tRunWrapper struct {
-	T
-	inner RunT
-}
-
-func (w tRunWrapper) Run(name string, f func(*testing.T)) bool {
-	return w.inner.Run(name, f)
-}
-
-func (w tRunWrapper) Parallel() { w.inner.Parallel() }
-
-// AdjustSkipFrames forwards the skip frame adjustment to the inner wrapper if it supports it
-// tRunWrapper adds 0 frames (it just delegates all T methods directly)
-func (w tRunWrapper) AdjustSkipFrames(skip int) {
-	if adjuster, ok := w.inner.(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip) // +0 since tRunWrapper doesn't add any frames
 	}
 }
 
@@ -99,6 +81,7 @@ func (r runTHelper) Fail() {
 		return
 	}
 	// Fallback
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	r.T.FailNow()
 }
 

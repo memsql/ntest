@@ -67,6 +67,7 @@ func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 		return runnable.Run(name, f)
 	}
 	t.T.Logf("Run not supported by %T", t.orig)
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.FailNow()
 	return false
 }
@@ -114,6 +115,7 @@ func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
 		return runnable.Run(name, f)
 	}
 	t.T.Logf("Run not supported by %T", t.orig)
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.FailNow()
 	return false
 }
