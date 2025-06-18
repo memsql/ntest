@@ -42,6 +42,10 @@ func TestParallelMatrixBuffered(t *testing.T) {
 	testRunTBasicLogger(ntest.AsRunT(ntest.BufferedLogger(t)))
 }
 
+func TestParallelMatrixExtraBuffered(t *testing.T) {
+	testRunTBasicLogger(ntest.AsRunT(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-")))
+}
+
 func testRunTBasic(runT ntest.RunT) {
 	// Simple test to verify RunT functionality works
 	var ran bool
