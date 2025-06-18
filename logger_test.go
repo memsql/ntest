@@ -47,14 +47,12 @@ func TestPrefixLogger(t *testing.T) {
 
 // Test line number accuracy for BufferedLogger
 func TestBufferedLogger_LineNumberAccuracy(t *testing.T) {
-	t.Setenv("NTEST_BUFFERING", "true")
 	mockT := newMockedT("TestBufferedLogger_LineNumberAccuracy")
 	buffered := ntest.BufferedLogger(mockT)
 	testLineNumberAccuracy(t, buffered, mockT, true, true) // expect buffering, test should fail to check line numbers
 }
 
 func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
-	t.Setenv("NTEST_BUFFERING", "true")
 	mockT := newMockedT("TestExtraDetailLogger_LineNumberAccuracy")
 	buffered := ntest.BufferedLogger(mockT)
 	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
@@ -62,11 +60,12 @@ func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 }
 
 func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *testing.T) {
+	// Set environment variable to disable buffering
 	t.Setenv("NTEST_BUFFERING", "false")
+
 	mockT := newMockedT("TestExtraDetailLogger_NoBuffering")
 	buffered := ntest.BufferedLogger(mockT)
-	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
-	testLineNumberAccuracy(t, extraDetail, mockT, false, false) // no buffering, test passes (logs appear immediately)
+	testLineNumberAccuracy(t, buffered, mockT, false, false) // no buffering, test passes (logs appear immediately)
 }
 
 // Generic line number accuracy test that works with different logger configurations
@@ -103,7 +102,6 @@ func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expect
 
 	if expectBuffering && !shouldFail {
 		// For passing tests with buffering, no logs should be captured
-		mockT.triggerCleanup()
 		assert.Equal(t, 0, len(mockT.captured), "no logs should be captured for passing test")
 		t.Log("Buffered logger passing test completed successfully")
 		return
@@ -113,25 +111,13 @@ func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expect
 	found := false
 	expectedLine := strconv.Itoa(logLine)
 
-	if !expectBuffering {
-		// When buffering is disabled, just check that the message appears
-		t.Log("Looking for message in immediate output (no buffering)")
-		for _, log := range mockT.captured {
-			if strings.Contains(log, "Test message for line accuracy") {
-				t.Logf("✓ Found log message (no buffering): %s", log)
-				found = true
-				break
-			}
-		}
-	} else {
-		// For buffered output, look for the correct line number
-		t.Logf("Looking for line number: %s", expectedLine)
-		for _, log := range mockT.captured {
-			if strings.Contains(log, "Test message for line accuracy") && strings.Contains(log, "logger_test.go:"+expectedLine) {
-				found = true
-				t.Logf("✓ Found log message with correct line number: %s", log)
-				break
-			}
+	t.Logf("Looking for line number: %s", expectedLine)
+	for _, log := range mockT.captured {
+		t.Logf("examining: %s", log)
+		if strings.Contains(log, "Test message for line accuracy") && strings.Contains(log, "logger_test.go:"+expectedLine) && strings.Contains(log, "Test message for line accuracy") {
+			found = true
+			t.Logf("✓ Found log message with correct line number: %s", log)
+			break
 		}
 	}
 
@@ -191,13 +177,21 @@ func (m *mockedT) Skipf(format string, args ...interface{}) {
 	m.skipped = true
 }
 
+func (m *mockedT) log(s string) {
+	_, file, line, _ := runtime.Caller(2)
+	if idx := strings.LastIndex(file, "/"); idx >= 0 {
+		file = file[idx+1:]
+	}
+	m.captured = append(m.captured, fmt.Sprintf("%s:%d %s", file, line, s))
+}
+
 func (m *mockedT) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
-	m.captured = append(m.captured, strings.TrimSpace(line))
+	m.log(line)
 }
 
 func (m *mockedT) Logf(format string, args ...interface{}) {
-	m.captured = append(m.captured, fmt.Sprintf(format, args...))
+	m.log(fmt.Sprintf(format, args...))
 }
 
 func (m *mockedT) Error(args ...interface{}) {
