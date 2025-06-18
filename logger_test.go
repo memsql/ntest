@@ -49,7 +49,7 @@ func TestPrefixLogger(t *testing.T) {
 func TestBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	mockT := newMockedT("TestBufferedLogger_LineNumberAccuracy")
 	buffered := ntest.BufferedLogger(mockT)
-	testLineNumberAccuracy(t, buffered, mockT, true, true, "") // expect buffering, test should fail to check line numbers
+	testLineNumberAccuracy(t, buffered, mockT, true, true) // expect buffering, test should fail to check line numbers
 }
 
 func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
@@ -57,6 +57,14 @@ func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	buffered := ntest.BufferedLogger(mockT)
 	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
 	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "PREFIX") // expect buffering, test should fail to check line numbers
+}
+
+func TestExtraDetailLogger_Doubled_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
+	mockT := newMockedT("TestExtraDetailLogger_LineNumberAccuracy")
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
+	extraDetail2 := ntest.ExtraDetailLogger(extraDetail, "PREFIX2")
+	testLineNumberAccuracy(t, extraDetail2, mockT, true, true, "PREFIX2", "PREFIX") // expect buffering, test should fail to check line numbers
 }
 
 func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
@@ -74,11 +82,11 @@ func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *
 
 	mockT := newMockedT("TestExtraDetailLogger_NoBuffering")
 	buffered := ntest.BufferedLogger(mockT)
-	testLineNumberAccuracy(t, buffered, mockT, false, false, "") // no buffering, test passes (logs appear immediately)
+	testLineNumberAccuracy(t, buffered, mockT, false, false) // no buffering, test passes (logs appear immediately)
 }
 
 // Generic line number accuracy test that works with different logger configurations
-func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expectBuffering bool, shouldFail bool, mustFind string) {
+func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expectBuffering bool, shouldFail bool, mustFind ...string) {
 	if expectBuffering {
 		if shouldFail {
 			t.Log("Testing buffered logger with failing test (should output buffered logs)")
@@ -124,8 +132,8 @@ func testLineNumberAccuracy(t *testing.T, logger ntest.T, mockT *mockedT, expect
 	for _, entry := range mockT.captured {
 		for _, log := range strings.Split(entry, "\n") {
 			t.Logf("examining: %s", log)
-			if mustFind != "" {
-				if !strings.Contains(log, mustFind) {
+			for _, s := range mustFind {
+				if !strings.Contains(log, s) {
 					continue
 				}
 			}
