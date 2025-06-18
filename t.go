@@ -91,7 +91,7 @@ func (r runTHelper) Fail() {
 		failer.Fail()
 		return
 	}
-	// Fallback - most T implementations have some way to fail
+	// Fallback
 	r.T.FailNow()
 }
 
@@ -101,4 +101,18 @@ func (r runTHelper) Parallel() {
 		return
 	}
 	// If not supported, we just continue - parallel is optional
+}
+
+// RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic
+// This reduces boilerplate in matrix testing
+func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
+	return t.Run(name, func(subT *testing.T) {
+		var reWrapped RunT
+		if reWrapper, ok := t.(ReWrapper); ok {
+			reWrapped = NewTestRunner(reWrapper.ReWrap(subT))
+		} else {
+			reWrapped = NewTestRunner(subT)
+		}
+		f(reWrapped)
+	})
 }

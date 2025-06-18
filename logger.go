@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -80,7 +81,7 @@ func (t *ReplaceLoggerT[ET]) AdjustSkipFrames(skip int) {
 
 func (t LoggerT[ET]) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
-	t.logger(line[0 : len(line)-1])
+	t.logger(line)
 }
 
 func (t LoggerT[ET]) Logf(format string, args ...interface{}) {
@@ -137,40 +138,23 @@ func ExtraDetailLogger[ET T](t ET, prefix string) T {
 }
 
 type bufferedLogEntry struct {
-	message  string
-	file     string
-	line     int
-	function string
+	message string
+	file    string
+	line    int
 }
 
 // createBufferedLoggerWithDynamicSkip creates a logger function that buffers log entries
 // and outputs them during cleanup if the test fails, using a dynamic skip frames function
 func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) func(string) {
-	if os.Getenv("NTEST_BUFFERING") == "false" {
-		// When buffering is disabled, we still need to provide accurate line numbers
-		// but log immediately instead of buffering
-		return func(message string) {
-			// Get caller information with proper skip frames
-			skipFrames := skipFramesFunc()
-			_, file, line, ok := runtime.Caller(2 + skipFrames)
-			if ok {
-				// Get just the filename, not the full path
-				if idx := strings.LastIndex(file, "/"); idx >= 0 {
-					file = file[idx+1:]
-				}
-				// Log with file:line prefix to preserve line number information
-				t.Logf("%s:%d %s", file, line, message)
-			} else {
-				// Fallback if we can't get caller info
-				t.Log(message)
-			}
-		}
-	}
-
 	entries := make([]bufferedLogEntry, 0)
+	var cleanupCalled bool
+	var lock sync.Mutex
 
 	// Register cleanup function to output buffered logs if test failed
 	t.Cleanup(func() {
+		lock.Lock()
+		defer lock.Unlock()
+		cleanupCalled = true
 		if t.Failed() && len(entries) > 0 {
 			var buffer strings.Builder
 			var size int
@@ -194,7 +178,7 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 		// Stack: runtime.Caller <- this lambda <- LoggerT.Log/Logf <- user code
 		// We need to skip: this function (1) + LoggerT.Log/Logf (1) + any additional frames (skipFramesFunc())
 		skipFrames := skipFramesFunc()
-		pc, file, line, ok := runtime.Caller(2 + skipFrames)
+		_, file, line, ok := runtime.Caller(2 + skipFrames)
 		if !ok {
 			file = "unknown"
 			line = 0
@@ -205,25 +189,20 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 			}
 		}
 
-		var function string
-		if pc != 0 {
-			if fn := runtime.FuncForPC(pc); fn != nil {
-				function = fn.Name()
-				// Strip package path from function name
-				if idx := strings.LastIndex(function, "."); idx >= 0 {
-					function = function[idx+1:]
-				}
-			}
-		}
-
 		entry := bufferedLogEntry{
-			message:  message,
-			file:     file,
-			line:     line,
-			function: function,
+			message: message,
+			file:    file,
+			line:    line,
 		}
 
-		entries = append(entries, entry)
+		lock.Lock()
+		defer lock.Unlock()
+
+		if cleanupCalled {
+			t.Logf("[%s:%d] %s", file, line, message)
+		} else {
+			entries = append(entries, entry)
+		}
 	}
 }
 
