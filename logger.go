@@ -10,15 +10,15 @@ import (
 	"time"
 )
 
-type LoggerT[ET T] struct {
+type loggerT[ET T] struct {
 	runTHelper    // Embeds T and provides Fail/Parallel
 	orig       ET // Keep reference to original for Run method
 	logger     func(string)
 	skipFrames int // Additional skip frames for nested wrappers
 }
 
-// ReplaceLoggerT directly implements T interface to avoid double LoggerT wrapping
-type ReplaceLoggerT[ET T] struct {
+// replaceLoggerT directly implements T interface to avoid double loggerT wrapping
+type replaceLoggerT[ET T] struct {
 	runTHelper
 	orig   ET
 	logger func(string)
@@ -27,12 +27,12 @@ type ReplaceLoggerT[ET T] struct {
 // ReplaceLogger creates a logger wrapper that overrides the logging function.
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
-	// the extra call frames: ReplaceLoggerT.Log -> custom logger function -> underlying logger call
+	// the extra call frames: replaceLoggerT.Log -> custom logger function -> underlying logger call
 	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(2) // +2 for ReplaceLoggerT.Log and the custom logger function
+		adjuster.AdjustSkipFrames(2) // +2 for replaceLoggerT.Log and the custom logger function
 	}
 
-	wrapped := &ReplaceLoggerT[ET]{
+	wrapped := &replaceLoggerT[ET]{
 		runTHelper: runTHelper{T: t},
 		orig:       t,
 		logger:     logger,
@@ -40,19 +40,19 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	return any(wrapped).(T)
 }
 
-func (t ReplaceLoggerT[ET]) Log(args ...interface{}) {
+func (t replaceLoggerT[ET]) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
 	t.logger(message)
 }
 
-func (t ReplaceLoggerT[ET]) Logf(format string, args ...interface{}) {
+func (t replaceLoggerT[ET]) Logf(format string, args ...interface{}) {
 	message := fmt.Sprintf(format, args...)
 	t.logger(message)
 }
 
 // Run implements the new RunT interface
-func (t ReplaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
+func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	if runnable, ok := any(t.orig).(interface {
 		Run(string, func(*testing.T)) bool
 	}); ok {
@@ -63,8 +63,8 @@ func (t ReplaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	return false
 }
 
-// ReWrap implements ReWrapper to recreate ReplaceLoggerT with fresh *testing.T
-func (t ReplaceLoggerT[ET]) ReWrap(newT *testing.T) T {
+// ReWrap implements ReWrapper to recreate replaceLoggerT with fresh *testing.T
+func (t replaceLoggerT[ET]) ReWrap(newT *testing.T) T {
 	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
 		rewrapped := reWrapper.ReWrap(newT)
 		return ReplaceLogger(rewrapped, t.logger)
@@ -73,23 +73,23 @@ func (t ReplaceLoggerT[ET]) ReWrap(newT *testing.T) T {
 }
 
 // AdjustSkipFrames forwards to the underlying logger if it supports it
-func (t *ReplaceLoggerT[ET]) AdjustSkipFrames(skip int) {
+func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
 	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
 
-func (t LoggerT[ET]) Log(args ...interface{}) {
+func (t loggerT[ET]) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
 	t.logger(line)
 }
 
-func (t LoggerT[ET]) Logf(format string, args ...interface{}) {
+func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 	t.logger(fmt.Sprintf(format, args...))
 }
 
-// AdjustSkipFrames adjusts skip frames on this LoggerT instance
-func (t *LoggerT[ET]) AdjustSkipFrames(skip int) {
+// AdjustSkipFrames adjusts skip frames on this loggerT instance
+func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames += skip
 	// Also forward to the underlying T if it supports AdjustSkipFrames
 	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
@@ -98,7 +98,7 @@ func (t *LoggerT[ET]) AdjustSkipFrames(skip int) {
 }
 
 // Run implements the new RunT interface that expects func(*testing.T)
-func (t LoggerT[ET]) Run(name string, f func(*testing.T)) bool {
+func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	// Delegate to the underlying orig's Run method
 	if runnable, ok := any(t.orig).(interface {
 		Run(string, func(*testing.T)) bool
@@ -110,15 +110,15 @@ func (t LoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	return false
 }
 
-// ReWrap implements ReWrapper to recreate LoggerT with fresh *testing.T
-func (t LoggerT[ET]) ReWrap(newT *testing.T) T {
+// ReWrap implements ReWrapper to recreate loggerT with fresh *testing.T
+func (t loggerT[ET]) ReWrap(newT *testing.T) T {
 	// Simple approach: let the underlying layer handle ReWrap if it supports it
 	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
 		reWrapper.ReWrap(newT)
 	}
 
-	// Create new LoggerT with the same logger function but fresh underlying
-	wrapped := &LoggerT[*testing.T]{
+	// Create new loggerT with the same logger function but fresh underlying
+	wrapped := &loggerT[*testing.T]{
 		runTHelper: runTHelper{T: newT},
 		orig:       newT,
 		logger:     t.logger, // Reuse the same logger function
@@ -175,8 +175,8 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 
 	return func(message string) {
 		// Get caller information
-		// Stack: runtime.Caller <- this lambda <- LoggerT.Log/Logf <- user code
-		// We need to skip: this function (1) + LoggerT.Log/Logf (1) + any additional frames (skipFramesFunc())
+		// Stack: runtime.Caller <- this lambda <- loggerT.Log/Logf <- user code
+		// We need to skip: this function (1) + loggerT.Log/Logf (1) + any additional frames (skipFramesFunc())
 		skipFrames := skipFramesFunc()
 		_, file, line, ok := runtime.Caller(2 + skipFrames)
 		if !ok {
@@ -214,14 +214,14 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 //
 // If the environment variable NTEST_BUFFERING is set to "false", buffering
 // will be turned off and the original T will be returned directly.
-// Returns T for direct use, or use AsRunT helper to convert to RunT[LoggerT[T]] for matrix testing.
+// Returns T for direct use, or use AsRunT helper to convert to RunT[loggerT[T]] for matrix testing.
 func BufferedLogger[ET T](t ET) T {
 	if os.Getenv("NTEST_BUFFERING") == "false" {
 		// When buffering is disabled, return the original T directly to avoid any intermediate calls
 		return t
 	}
 
-	wrapped := &LoggerT[ET]{
+	wrapped := &loggerT[ET]{
 		runTHelper: runTHelper{T: t}, // Set the embedded helper
 		orig:       t,                // Keep reference to original
 		skipFrames: 0,                // Initialize skip frames, will be adjusted by AdjustSkipFrames
