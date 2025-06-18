@@ -50,16 +50,6 @@ func (s simpleRunT[ET]) Run(name string, f func(ET)) bool {
 	return false
 }
 
-// Runner provides RunT functionality without specific type constraints.
-// This allows functions to return a type that can be used with matrix testing
-// without exposing the concrete wrapper types.
-type Runner interface {
-	T
-	Run(string, func(T)) bool
-	Fail()
-	Parallel()
-}
-
 // tRunWrapper wraps any RunT[WT] to implement RunT[T]
 type tRunWrapper[WT T] struct {
 	T
