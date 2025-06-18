@@ -1,13 +1,16 @@
 package ntest
 
 import (
+	"testing"
+
 	"github.com/muir/nject/v2"
 )
 
 // RunParallelMatrix uses t.Run() to fork into multiple threads of execution for each
 // sub-test before any chains are evaluated. This forces the chains to share
 // nothing between them. RunParallelMatrix does not provide any default injectors
-// other than a *testing.T that comes from a named provider (named "testing.T")
+// other than a *testing.T that comes from a named provider (named "testing.T"). That
+// injector is only present if the RunT argument was actually a *testing.T
 //
 // A matrix is a specific type: map[string]nject.Provider. Add those to the
 // chain to trigger matrix testing.
@@ -41,7 +44,9 @@ func RunMatrix(t RunT, chain ...any) {
 func runMatrixTest(t RunT, parallel bool, chain []any) {
 	matrix, before, after := breakChain(chain)
 	if matrix == nil {
-		panic("matrix test requires a matrix")
+		t.Log("FAIL: matrix test requires a matrix")
+		t.FailNow()
+		return
 	}
 
 	var startTest func(RunT, map[string]nject.Provider, []any, []any)
@@ -52,9 +57,15 @@ func runMatrixTest(t RunT, parallel bool, chain []any) {
 				if parallel {
 					reWrapped.Parallel()
 				}
+				testingT := func(tInner RunT) []any {
+					if tt, ok := tInner.(*testing.T); ok {
+						return []any{nject.Provide("testing.T", func() *testing.T { return tt })}
+					}
+					return []any{}
+				}
 				matrix, newBefore, newAfter := breakChain(after)
 				if matrix == nil {
-					RunTest(reWrapped, combineSlices(before, []any{subChain}, after)...)
+					RunTest(reWrapped, combineSlices(testingT(t), before, []any{subChain}, after)...)
 				} else {
 					startTest(reWrapped, matrix, combineSlices(before, newBefore, []any{subChain}), newAfter)
 				}

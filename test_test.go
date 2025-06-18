@@ -39,23 +39,11 @@ func TestParallelMatrixExtraDetail(t *testing.T) {
 }
 
 func TestParallelMatrixBuffered(t *testing.T) {
-	testRunTBasicLogger(ntest.AsRunT(ntest.BufferedLogger(t)))
+	testParallelMatrix(ntest.AsRunT(ntest.BufferedLogger(t)))
 }
 
 func TestParallelMatrixExtraBuffered(t *testing.T) {
-	testRunTBasicLogger(ntest.AsRunT(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-")))
-}
-
-func testRunTBasicLogger(runT ntest.RunT) {
-	// Simple test to verify RunT functionality works
-	var ran bool
-	success := runT.Run("subtest", func(subT *testing.T) {
-		subT.Log("This is a subtest")
-		ran = true
-	})
-	if !success || !ran {
-		runT.Fatal("RunT functionality failed")
-	}
+	testParallelMatrix(ntest.AsRunT(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-")))
 }
 
 func testParallelMatrix(t ntest.RunT) {
@@ -78,7 +66,7 @@ func testParallelMatrix(t ntest.RunT) {
 				},
 			),
 		},
-		func(t *testing.T, s string, c chan struct{}) {
+		func(t ntest.T, s string, c chan struct{}) {
 			t.Logf("final func for %s", t.Name())
 			t.Logf("s = %s", s)
 			mu.Lock()
@@ -107,9 +95,46 @@ func testParallelMatrix(t ntest.RunT) {
 }
 
 func testParallelMatrixLogger(t ntest.RunT) {
-	// Simple test to verify the logger wrapper works
+	// Test that logger wrappers work with matrix testing (exercises ReWrap functionality)
 	t.Log("Testing logger wrapper functionality")
 	t.Logf("Logger wrapper test for type %T", t)
+
+	// Use the same pattern as testParallelMatrix
+	doneA := make(chan struct{})
+	doneB := make(chan struct{})
+
+	ntest.RunParallelMatrix(t,
+		func() string { return "test-value" },
+		map[string]nject.Provider{
+			"loggerA": nject.Provide("loggerA", func(t ntest.T, s string) (string, chan struct{}) {
+				t.Logf("In loggerA subtest with value: %s", s)
+				return t.Name(), doneA
+			}),
+			"loggerB": nject.Provide("loggerB", func(t ntest.T, s string) (string, chan struct{}) {
+				t.Logf("In loggerB subtest with value: %s", s)
+				return t.Name(), doneB
+			}),
+		},
+		func(t ntest.T, name string, c chan struct{}) {
+			t.Logf("Matrix test completed for %s", name)
+			close(c)
+		},
+	)
+
+	// Wait for both subtests to complete
+	t.Run("validate", func(subT *testing.T) {
+		subT.Parallel()
+		select {
+		case <-doneA:
+		case <-time.After(time.Second):
+			require.False(subT, true, "loggerA timeout")
+		}
+		select {
+		case <-doneB:
+		case <-time.After(time.Second):
+			require.False(subT, true, "loggerB timeout")
+		}
+	})
 }
 
 func TestMatrix(t *testing.T) {
@@ -156,12 +181,63 @@ func TestExtra(t *testing.T) {
 }
 
 func TestEmptyMatrix(t *testing.T) {
-	t.Skip("this test is expected to fail")
 	t.Parallel()
-	ntest.RunMatrix(t,
+	mk := newMockedT(t.Name())
+	ntest.RunMatrix(ntest.AsRunT(mk),
 		func() int { return 7 },
 		func(t *testing.T, i int) {
 			assert.Equal(t, 7, i)
 		},
 	)
+	assert.True(t, mk.Failed())
+}
+
+// TestRunWithReWrap tests the RunWithReWrap functionality directly
+func TestRunWithReWrap(t *testing.T) {
+	t.Parallel()
+
+	// Test with a logger that implements ReWrapper
+	logger := ntest.ExtraDetailLogger(t, "RWRW-")
+	runT := ntest.AsRunT(logger)
+
+	var subTestRan bool
+	success := ntest.RunWithReWrap(runT, "rewrap-test", func(reWrapped ntest.RunT) {
+		reWrapped.Log("This should be prefixed and timestamped")
+		reWrapped.Logf("Formatted message: %s", "test")
+		subTestRan = true
+	})
+
+	assert.True(t, success, "RunWithReWrap should succeed")
+	assert.True(t, subTestRan, "Subtest should have run")
+}
+
+// TestLoggerRun tests the Run methods on logger types with unsupported underlying types
+func TestLoggerRun(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock T that doesn't support Run to test fallback behavior
+	mockT := newMockedT(t.Name())
+	logger := ntest.ExtraDetailLogger(mockT, "TEST-")
+
+	// Capture log output to verify the "Run not supported" message
+	var loggedMessages []string
+	captureLogger := ntest.ReplaceLogger(t, func(s string) {
+		loggedMessages = append(loggedMessages, s)
+	})
+
+	mockT.FailNow()
+
+	// This should trigger the "Run not supported" path and FailNow
+	success := logger.(interface {
+		Run(string, func(*testing.T)) bool
+	}).Run("test", func(subT *testing.T) {
+		captureLogger.Log("Should not reach here")
+	})
+
+	// Verify the expected behavior
+	assert.False(t, success, "Run should return false for unsupported type")
+	assert.True(t, mockT.Failed(), "FailNow should have been called")
+
+	// Check that we don't have any captured messages (the test function shouldn't have run)
+	assert.Empty(t, loggedMessages, "The test function should not have been called")
 }

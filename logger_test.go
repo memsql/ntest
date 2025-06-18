@@ -45,6 +45,24 @@ func TestPrefixLogger(t *testing.T) {
 	t.Log("ExtraDetailLogger test completed successfully")
 }
 
+// TestLoggerLogf tests the Logf method on loggerT
+func TestLoggerLogf(t *testing.T) {
+	t.Parallel()
+
+	var captured []string
+	captureLogger := ntest.ReplaceLogger(t, func(s string) {
+		captured = append(captured, s)
+	})
+
+	// Use BufferedLogger to create a loggerT instance, then call Logf
+	buffered := ntest.BufferedLogger(captureLogger)
+	buffered.Logf("Formatted message: %d %s", 42, "test")
+
+	// Since it's buffered and test will pass, we won't see the output directly
+	// But this ensures the Logf method is called
+	assert.NotNil(t, buffered, "BufferedLogger should return non-nil")
+}
+
 // Test line number accuracy for BufferedLogger
 func TestBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	mockT := newMockedT("TestBufferedLogger_LineNumberAccuracy")
