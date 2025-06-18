@@ -75,8 +75,15 @@ func runMatrixTest(t RunT, parallel bool, chain []any) {
 }
 
 func breakChain(chain []any) (matrix map[string]nject.Provider, before []any, after []any) {
-	// Implementation for breaking the chain - this needs to be implemented
-	// For now, return a simple implementation
+	for i, item := range chain {
+		if m, ok := item.(map[string]nject.Provider); ok {
+			// Found the matrix, split the chain
+			before = chain[:i]
+			after = chain[i+1:]
+			return m, before, after
+		}
+	}
+	// No matrix found
 	return nil, chain, nil
 }
 
