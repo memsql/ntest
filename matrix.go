@@ -1,8 +1,6 @@
 package ntest
 
 import (
-	"testing"
-
 	"github.com/muir/nject/v2"
 )
 
@@ -50,15 +48,7 @@ func runMatrixTest(t RunT, parallel bool, chain []any) {
 	startTest = func(t RunT, matrix map[string]nject.Provider, before []any, after []any) {
 		for name, subChain := range matrix {
 			subChain := subChain
-			t.Run(name, func(subT *testing.T) {
-				// Implement ReWrapper logic here
-				var reWrapped RunT
-				if reWrapper, ok := t.(ReWrapper); ok {
-					reWrapped = NewTestRunner(reWrapper.ReWrap(subT))
-				} else {
-					reWrapped = NewTestRunner(subT)
-				}
-
+			RunWithReWrap(t, name, func(reWrapped RunT) {
 				if parallel {
 					reWrapped.Parallel()
 				}

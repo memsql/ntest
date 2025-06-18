@@ -103,8 +103,9 @@ func (r runTHelper) Parallel() {
 	// If not supported, we just continue - parallel is optional
 }
 
-// RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic
-// This reduces boilerplate in matrix testing
+// RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.
+// This should be used instead of calling t.Run in tests that use
+// ReplaceLogger, BufferedLogger, or ExtraDetailLogger.
 func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 	return t.Run(name, func(subT *testing.T) {
 		var reWrapped RunT
