@@ -9,17 +9,19 @@ import (
 )
 
 type logWrappedT[ET T] struct {
-	eitherT[logWrappedT[ET], ET]
-	logger func(string)
+	runTHelper    // Embeds T and provides Fail/Parallel
+	orig       ET // Keep reference to original for Run method
+	logger     func(string)
 }
 
 // ReplaceLogger creates a T that is wrapped so that the logger is
 // overridden with the provided function.
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	self := logWrappedT[ET]{
-		logger: logger,
+		runTHelper: runTHelper{T: t}, // Set the embedded helper
+		orig:       t,                // Keep reference to original
+		logger:     logger,
 	}
-	self.eitherT = makeEitherTSimple[ET](t, self)
 	return self
 }
 
@@ -34,9 +36,26 @@ func (t logWrappedT[ET]) Logf(format string, args ...interface{}) {
 
 // AdjustSkipFrames adjusts skip frames on the underlying T if it supports it
 func (t logWrappedT[ET]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := any(t.eitherT).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
+}
+
+// RunT methods
+func (t logWrappedT[ET]) Run(name string, f func(logWrappedT[ET])) bool {
+	if runT, ok := any(t.orig).(RunT[ET]); ok {
+		return runT.Run(name, func(innerT ET) {
+			inner := logWrappedT[ET]{
+				runTHelper: runTHelper{T: innerT},
+				orig:       innerT,
+				logger:     t.logger,
+			}
+			f(inner)
+		})
+	}
+	t.T.Logf("Run not supported by %T", t.orig)
+	t.T.FailNow()
+	return false
 }
 
 // ExtraDetailLogger creates a logger wrapper that adds both a
@@ -66,17 +85,10 @@ func ExtraDetailLogger[ET T](t ET, prefix string) logWrappedT[ET] {
 		t.Log(prefix, time.Now().Format("15:04:05"), s)
 	}
 
-	// Create a constructor function that captures the logger
-	makeLogWrapped := func(either eitherT[logWrappedT[ET], ET]) logWrappedT[ET] {
-		return logWrappedT[ET]{
-			eitherT: either,
-			logger:  logger,
-		}
-	}
-
 	wrapped := logWrappedT[ET]{
-		eitherT: makeEitherT[logWrappedT[ET], ET](t, makeLogWrapped),
-		logger:  logger,
+		runTHelper: runTHelper{T: t}, // Set the embedded helper
+		orig:       t,                // Keep reference to original
+		logger:     logger,
 	}
 
 	return wrapped
@@ -91,14 +103,35 @@ type bufferedLogEntry struct {
 
 // BufferedLogWrappedT is the type returned by BufferedLogger
 type BufferedLogWrappedT[ET T] struct {
-	eitherT[*BufferedLogWrappedT[ET], ET]
+	runTHelper    // Embeds T and provides Fail/Parallel
+	orig       ET // Keep reference to original for Run method
 	entries    []bufferedLogEntry
-	skipFrames int // Number of additional stack frames to skip
+	skipFrames int  // Number of additional stack frames to skip
+	disabled   bool // Whether buffering is disabled
 }
 
 // AdjustSkipFrames changes the number of stack frames to skip when capturing caller info
 func (t *BufferedLogWrappedT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames = skip
+}
+
+// RunT methods
+func (t *BufferedLogWrappedT[ET]) Run(name string, f func(*BufferedLogWrappedT[ET])) bool {
+	if runT, ok := any(t.orig).(RunT[ET]); ok {
+		return runT.Run(name, func(innerT ET) {
+			inner := &BufferedLogWrappedT[ET]{
+				runTHelper: runTHelper{T: innerT},
+				orig:       innerT,
+				entries:    make([]bufferedLogEntry, 0),
+				skipFrames: t.skipFrames,
+				disabled:   t.disabled,
+			}
+			f(inner)
+		})
+	}
+	t.T.Logf("Run not supported by %T", t.orig)
+	t.T.FailNow()
+	return false
 }
 
 // BufferedLogger creates a T that buffers all log output and only
@@ -113,28 +146,22 @@ func (t *BufferedLogWrappedT[ET]) AdjustSkipFrames(skip int) {
 func BufferedLoggerT[ET T](t ET) *BufferedLogWrappedT[ET] {
 	if os.Getenv("NTEST_BUFFERING") == "false" {
 		// When buffering is disabled, we still need to return the wrapper type
-		// but we'll make it pass through to the underlying T with proper stack frame handling
-		wrapped := &BufferedLogWrappedT[ET]{
-			entries:    make([]bufferedLogEntry, 0),
-			skipFrames: 2, // Account for the wrapper stack frames
-		}
-		wrapped.eitherT = makeEitherTSimple[ET](t, wrapped)
-		return wrapped
-	}
-
-	// Create a constructor function for the buffered wrapper
-	makeBufferedWrapped := func(either eitherT[*BufferedLogWrappedT[ET], ET]) *BufferedLogWrappedT[ET] {
+		// but we'll make it pass through to the underlying T directly
 		return &BufferedLogWrappedT[ET]{
-			eitherT:    either,
+			runTHelper: runTHelper{T: t},
+			orig:       t,
 			entries:    make([]bufferedLogEntry, 0),
 			skipFrames: 0,
+			disabled:   true, // Mark as disabled
 		}
 	}
 
 	wrapped := &BufferedLogWrappedT[ET]{
-		eitherT:    makeEitherT[*BufferedLogWrappedT[ET], ET](t, makeBufferedWrapped),
+		runTHelper: runTHelper{T: t},
+		orig:       t,
 		entries:    make([]bufferedLogEntry, 0),
 		skipFrames: 0,
+		disabled:   false,
 	}
 
 	// Register cleanup function to output buffered logs if test failed
@@ -162,6 +189,21 @@ func BufferedLoggerT[ET T](t ET) *BufferedLogWrappedT[ET] {
 
 // BufferedLogger creates a T that buffers all log output and supports RunT functionality.
 func BufferedLogger[ET T](t ET) RunT[T] {
+	if os.Getenv("NTEST_BUFFERING") == "false" {
+		// When buffering is disabled, return the original T wrapped only for matrix testing
+		// This avoids any extra stack frames from the buffering wrapper
+		if runT, ok := any(t).(RunT[ET]); ok {
+			return NewTestRunner(runT)
+		}
+		// If t is not already a RunT, we need to create a minimal wrapper
+		// This should rarely happen in practice since most T's passed here implement RunT
+		simple := simpleRunT[ET]{
+			runTHelper: runTHelper{T: t},
+			orig:       t,
+		}
+		return NewTestRunner[ET](simple)
+	}
+
 	buffered := BufferedLoggerT(t)
 	// When wrapping with tRunWrapper, we need to skip one additional frame
 	// because tRunWrapper.Log() adds another level to the call stack

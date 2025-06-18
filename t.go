@@ -29,6 +29,27 @@ type RunT[GT T] interface {
 	Parallel()
 }
 
+// NewTestRunner creates a test runner that works with matrix testing from any RunT[T] type.
+// This is useful for converting wrapper types to work with matrix testing functions.
+func NewTestRunner[ET T](t RunT[ET]) RunT[T] {
+	return tRunWrapper[ET]{inner: t}
+}
+
+// simpleRunT provides RunT functionality for plain T types
+type simpleRunT[ET T] struct {
+	runTHelper
+	orig ET
+}
+
+func (s simpleRunT[ET]) Run(name string, f func(ET)) bool {
+	if runT, ok := any(s.orig).(RunT[ET]); ok {
+		return runT.Run(name, f)
+	}
+	s.T.Logf("Run not supported by %T", s.orig)
+	s.T.FailNow()
+	return false
+}
+
 // Runner provides RunT functionality without specific type constraints.
 // This allows functions to return a type that can be used with matrix testing
 // without exposing the concrete wrapper types.
@@ -38,81 +59,6 @@ type Runner interface {
 	Fail()
 	Parallel()
 }
-
-// eitherT provides RunT functionality for wrapper types (internal use only)
-// WT is the wrapper type (like logWrappedT[ET])
-// ET is the underlying T type
-// This allows embedding types to automatically implement RunT[WT]
-type eitherT[WT any, ET T] struct {
-	t        ET
-	wrapFunc func(eitherT[WT, ET]) WT
-}
-
-func makeEitherT[WT any, ET T](t ET, wrapFunc func(eitherT[WT, ET]) WT) eitherT[WT, ET] {
-	return eitherT[WT, ET]{
-		t:        t,
-		wrapFunc: wrapFunc,
-	}
-}
-
-func makeEitherTSimple[ET T, WT any](t ET, wrapper WT) eitherT[WT, ET] {
-	return eitherT[WT, ET]{
-		t: t,
-		wrapFunc: func(eitherT[WT, ET]) WT {
-			return wrapper
-		},
-	}
-}
-
-func (t eitherT[WT, ET]) Run(name string, f func(WT)) bool {
-	if runT, ok := any(t.t).(RunT[ET]); ok {
-		return runT.Run(name, func(innerT ET) {
-			innerSelf := eitherT[WT, ET]{
-				t:        innerT,
-				wrapFunc: t.wrapFunc,
-			}
-			f(t.wrapFunc(innerSelf))
-		})
-	}
-	t.t.Logf("Run not supported by %T", t.t)
-	t.t.FailNow()
-	return false
-}
-
-func (t eitherT[WT, ET]) Fail() {
-	if runT, ok := any(t.t).(RunT[ET]); ok {
-		runT.Fail()
-		return
-	}
-	t.t.Logf("Fail not supported by %T", t.t)
-	t.t.FailNow()
-}
-
-func (t eitherT[WT, ET]) Parallel() {
-	if runT, ok := any(t.t).(RunT[ET]); ok {
-		runT.Parallel()
-		return
-	}
-	t.t.Logf("Parallel not supported by %T", t.t)
-	t.t.FailNow()
-}
-
-// Delegate all T methods
-func (t eitherT[WT, ET]) Cleanup(f func())                          { t.t.Cleanup(f) }
-func (t eitherT[WT, ET]) Setenv(key, value string)                  { t.t.Setenv(key, value) }
-func (t eitherT[WT, ET]) Error(args ...interface{})                 { t.t.Error(args...) }
-func (t eitherT[WT, ET]) Errorf(format string, args ...interface{}) { t.t.Errorf(format, args...) }
-func (t eitherT[WT, ET]) FailNow()                                  { t.t.FailNow() }
-func (t eitherT[WT, ET]) Failed() bool                              { return t.t.Failed() }
-func (t eitherT[WT, ET]) Fatal(args ...interface{})                 { t.t.Fatal(args...) }
-func (t eitherT[WT, ET]) Fatalf(format string, args ...interface{}) { t.t.Fatalf(format, args...) }
-func (t eitherT[WT, ET]) Helper()                                   { t.t.Helper() }
-func (t eitherT[WT, ET]) Log(args ...interface{})                   { t.t.Log(args...) }
-func (t eitherT[WT, ET]) Logf(format string, args ...interface{})   { t.t.Logf(format, args...) }
-func (t eitherT[WT, ET]) Name() string                              { return t.t.Name() }
-func (t eitherT[WT, ET]) Skip(args ...interface{})                  { t.t.Skip(args...) }
-func (t eitherT[WT, ET]) Skipf(format string, args ...interface{})  { t.t.Skipf(format, args...) }
-func (t eitherT[WT, ET]) Skipped() bool                             { return t.t.Skipped() }
 
 // tRunWrapper wraps any RunT[WT] to implement RunT[T]
 type tRunWrapper[WT T] struct {
@@ -148,4 +94,27 @@ func (w tRunWrapper[WT]) AdjustSkipFrames(skip int) {
 	if adjuster, ok := any(w.inner).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
+}
+
+// runTHelper is a tiny wrapper around T that provides Fail and Parallel methods
+// by casting to appropriate interfaces. This can be embedded since it's not parameterized.
+type runTHelper struct {
+	T
+}
+
+func (r runTHelper) Fail() {
+	if failer, ok := r.T.(interface{ Fail() }); ok {
+		failer.Fail()
+		return
+	}
+	// Fallback - most T implementations have some way to fail
+	r.T.FailNow()
+}
+
+func (r runTHelper) Parallel() {
+	if parallel, ok := r.T.(interface{ Parallel() }); ok {
+		parallel.Parallel()
+		return
+	}
+	// If not supported, we just continue - parallel is optional
 }
