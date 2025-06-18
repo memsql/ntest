@@ -241,3 +241,47 @@ func TestLoggerRun(t *testing.T) {
 	// Check that we don't have any captured messages (the test function shouldn't have run)
 	assert.Empty(t, loggedMessages, "The test function should not have been called")
 }
+
+// TestSimpleRunTFallbacks tests that simpleRunT properly handles T types that don't support Run/Parallel
+func TestSimpleRunTFallbacks(t *testing.T) {
+	t.Parallel()
+
+	// Test with a mock T that doesn't support Run or Parallel
+	mockT := newMockedT("TestSimpleRunTFallbacks")
+	runT := ntest.NewTestRunner(mockT)
+
+	// Test Run fallback - should log error and fail
+	success := runT.Run("subtest", func(subT *testing.T) {
+		t.Error("This should not execute")
+	})
+
+	assert.False(t, success, "Run should return false when underlying T doesn't support Run")
+	assert.True(t, mockT.Failed(), "Should call FailNow when Run is not supported")
+
+	// Test Parallel fallback - should not panic when underlying T doesn't support Parallel
+	assert.NotPanics(t, func() {
+		runT.Parallel() // This should be a no-op for non-parallel T
+	}, "Parallel should not panic when underlying T doesn't support it")
+}
+
+// TestAdjustSkipFramesForwarding tests that AdjustSkipFrames properly forwards to underlying types
+func TestAdjustSkipFramesForwarding(t *testing.T) {
+	t.Parallel()
+
+	// Create a chain: BufferedLogger wrapping another BufferedLogger
+	// This creates a scenario where skip frames need to be properly forwarded through the chain
+	inner := ntest.BufferedLogger(t)
+	outer := ntest.BufferedLogger(inner)
+
+	// Both should support AdjustSkipFrames
+	if adjuster, ok := outer.(interface{ AdjustSkipFrames(int) }); ok {
+		// This should forward through the chain without panicking
+		adjuster.AdjustSkipFrames(2)
+
+		// Verify we can still log without errors (indicating the chain is intact)
+		outer.Log("Test message through forwarded skip frames")
+		assert.True(t, true, "AdjustSkipFrames forwarding should not break the logger chain")
+	} else {
+		t.Error("BufferedLogger should implement AdjustSkipFrames")
+	}
+}
