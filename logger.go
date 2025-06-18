@@ -127,69 +127,13 @@ func (t LoggerT[ET]) ReWrap(newT *testing.T) T {
 	return any(wrapped).(T)
 }
 
-// ExtraDetailLoggerT directly implements T interface to avoid double LoggerT wrapping
-type ExtraDetailLoggerT[ET T] struct {
-	runTHelper
-	orig   ET
-	prefix string
-}
-
 // ExtraDetailLogger creates a logger wrapper that adds both a
 // prefix and a timestamp to each line that is logged.
 func ExtraDetailLogger[ET T](t ET, prefix string) T {
-	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
-	// the extra call frame that ExtraDetailLoggerT.Log will add
-	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(1)
-	}
-
-	wrapped := &ExtraDetailLoggerT[ET]{
-		runTHelper: runTHelper{T: t},
-		orig:       t,
-		prefix:     prefix,
-	}
-	return any(wrapped).(T)
-}
-
-func (t ExtraDetailLoggerT[ET]) Log(args ...interface{}) {
-	line := fmt.Sprintln(args...)
-	message := line[0 : len(line)-1]
-	prefixedMessage := fmt.Sprintf("%s %s %s", t.prefix, time.Now().Format("15:04:05"), message)
-	t.orig.Log(prefixedMessage)
-}
-
-func (t ExtraDetailLoggerT[ET]) Logf(format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	prefixedMessage := fmt.Sprintf("%s %s %s", t.prefix, time.Now().Format("15:04:05"), message)
-	t.orig.Log(prefixedMessage)
-}
-
-// Run implements the new RunT interface
-func (t ExtraDetailLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.orig).(interface {
-		Run(string, func(*testing.T)) bool
-	}); ok {
-		return runnable.Run(name, f)
-	}
-	t.T.Logf("Run not supported by %T", t.orig)
-	t.T.FailNow()
-	return false
-}
-
-// ReWrap implements ReWrapper to recreate ExtraDetailLoggerT with fresh *testing.T
-func (t ExtraDetailLoggerT[ET]) ReWrap(newT *testing.T) T {
-	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
-		rewrapped := reWrapper.ReWrap(newT)
-		return ExtraDetailLogger(rewrapped, t.prefix)
-	}
-	return ExtraDetailLogger(newT, t.prefix)
-}
-
-// AdjustSkipFrames forwards to the underlying logger if it supports it
-func (t *ExtraDetailLoggerT[ET]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip)
-	}
+	return ReplaceLogger(t, func(s string) {
+		prefixedMessage := fmt.Sprintf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
+		t.Log(prefixedMessage)
+	})
 }
 
 type bufferedLogEntry struct {
