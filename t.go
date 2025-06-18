@@ -62,6 +62,7 @@ type Runner interface {
 
 // tRunWrapper wraps any RunT[WT] to implement RunT[T]
 type tRunWrapper[WT T] struct {
+	T
 	inner RunT[WT]
 }
 
@@ -71,28 +72,14 @@ func (w tRunWrapper[WT]) Run(name string, f func(T)) bool {
 	})
 }
 
-func (w tRunWrapper[WT]) Fail()                                     { w.inner.Fail() }
-func (w tRunWrapper[WT]) Parallel()                                 { w.inner.Parallel() }
-func (w tRunWrapper[WT]) Cleanup(f func())                          { w.inner.Cleanup(f) }
-func (w tRunWrapper[WT]) Setenv(key, value string)                  { w.inner.Setenv(key, value) }
-func (w tRunWrapper[WT]) Error(args ...interface{})                 { w.inner.Error(args...) }
-func (w tRunWrapper[WT]) Errorf(format string, args ...interface{}) { w.inner.Errorf(format, args...) }
-func (w tRunWrapper[WT]) FailNow()                                  { w.inner.FailNow() }
-func (w tRunWrapper[WT]) Failed() bool                              { return w.inner.Failed() }
-func (w tRunWrapper[WT]) Fatal(args ...interface{})                 { w.inner.Fatal(args...) }
-func (w tRunWrapper[WT]) Fatalf(format string, args ...interface{}) { w.inner.Fatalf(format, args...) }
-func (w tRunWrapper[WT]) Helper()                                   { w.inner.Helper() }
-func (w tRunWrapper[WT]) Log(args ...interface{})                   { w.inner.Log(args...) }
-func (w tRunWrapper[WT]) Logf(format string, args ...interface{})   { w.inner.Logf(format, args...) }
-func (w tRunWrapper[WT]) Name() string                              { return w.inner.Name() }
-func (w tRunWrapper[WT]) Skip(args ...interface{})                  { w.inner.Skip(args...) }
-func (w tRunWrapper[WT]) Skipf(format string, args ...interface{})  { w.inner.Skipf(format, args...) }
-func (w tRunWrapper[WT]) Skipped() bool                             { return w.inner.Skipped() }
+func (w tRunWrapper[WT]) Fail()     { w.inner.Fail() }
+func (w tRunWrapper[WT]) Parallel() { w.inner.Parallel() }
 
 // AdjustSkipFrames forwards the skip frame adjustment to the inner wrapper if it supports it
+// tRunWrapper adds 0 frames (it just delegates all T methods directly)
 func (w tRunWrapper[WT]) AdjustSkipFrames(skip int) {
 	if adjuster, ok := any(w.inner).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip)
+		adjuster.AdjustSkipFrames(skip) // +0 since tRunWrapper doesn't add any frames
 	}
 }
 

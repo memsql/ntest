@@ -35,9 +35,10 @@ func (t logWrappedT[ET]) Logf(format string, args ...interface{}) {
 }
 
 // AdjustSkipFrames adjusts skip frames on the underlying T if it supports it
+// logWrappedT adds 2 frames (Log/Logf method + the lambda function call)
 func (t logWrappedT[ET]) AdjustSkipFrames(skip int) {
 	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip)
+		adjuster.AdjustSkipFrames(skip + 2) // +2 for logWrappedT.Log/Logf + lambda function
 	}
 }
 
@@ -62,25 +63,6 @@ func (t logWrappedT[ET]) Run(name string, f func(logWrappedT[ET])) bool {
 // prefix and a timestamp to each line that is logged.
 // Returns logWrappedT which implements RunT for use with matrix testing.
 func ExtraDetailLogger[ET T](t ET, prefix string) logWrappedT[ET] {
-	// First, adjust skip frames on the underlying T if it supports it
-	// We need to skip 2 additional frames: the lambda function and the ReplaceLogger wrapper
-	skipFrames := 2
-
-	// Check if the underlying T is a tRunWrapper by checking if it has the specific method signature
-	// This is a bit of a hack, but it works to detect tRunWrapper without generics issues
-	tValue := any(t)
-	if wrapper, ok := tValue.(interface {
-		Run(string, func(T)) bool
-	}); ok {
-		// This looks like a tRunWrapper, so we need one more skip frame for tRunWrapper.Log
-		_ = wrapper // avoid unused variable
-		skipFrames = 3
-	}
-
-	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skipFrames)
-	}
-
 	logger := func(s string) {
 		t.Log(prefix, time.Now().Format("15:04:05"), s)
 	}
@@ -89,6 +71,11 @@ func ExtraDetailLogger[ET T](t ET, prefix string) logWrappedT[ET] {
 		runTHelper: runTHelper{T: t}, // Set the embedded helper
 		orig:       t,                // Keep reference to original
 		logger:     logger,
+	}
+
+	// Adjust skip frames on the underlying T to account for our wrapper
+	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
+		adjuster.AdjustSkipFrames(0) // This will add 2 frames via logWrappedT.AdjustSkipFrames
 	}
 
 	return wrapped
@@ -111,8 +98,9 @@ type BufferedLogWrappedT[ET T] struct {
 }
 
 // AdjustSkipFrames changes the number of stack frames to skip when capturing caller info
+// BufferedLogWrappedT adds 2 frames (Log/Logf → addLogEntry)
 func (t *BufferedLogWrappedT[ET]) AdjustSkipFrames(skip int) {
-	t.skipFrames = skip
+	t.skipFrames = skip + 2 // +2 for BufferedLogWrappedT.Log/Logf → addLogEntry
 }
 
 // RunT methods
@@ -205,10 +193,10 @@ func BufferedLogger[ET T](t ET) RunT[T] {
 	}
 
 	buffered := BufferedLoggerT(t)
-	// When wrapping with tRunWrapper, we need to skip one additional frame
-	// because tRunWrapper.Log() adds another level to the call stack
-	buffered.AdjustSkipFrames(1)
-	return tRunWrapper[*BufferedLogWrappedT[ET]]{inner: buffered}
+	return tRunWrapper[*BufferedLogWrappedT[ET]]{
+		T:     buffered, // Use buffered, not original t
+		inner: buffered,
+	}
 }
 
 func (t *BufferedLogWrappedT[ET]) addLogEntry(message string) {
