@@ -39,7 +39,7 @@ func TestParallelMatrixExtraDetail(t *testing.T) {
 }
 
 func TestParallelMatrixBuffered(t *testing.T) {
-	testRunTBasicLogger(ntest.BufferedLogger(t))
+	testRunTBasicLogger(ntest.AsRunT(ntest.BufferedLogger(t)))
 }
 
 func testRunTBasic(runT ntest.RunT[ntest.T]) {
