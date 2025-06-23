@@ -11,16 +11,14 @@ import (
 )
 
 type loggerT[ET T] struct {
-	T             // Direct embedding of T interface
-	orig       ET // Keep reference to original for Run method
+	T
 	logger     func(string)
 	skipFrames int // Additional skip frames for nested wrappers
 }
 
 // replaceLoggerT directly implements T interface to avoid double loggerT wrapping
 type replaceLoggerT[ET T] struct {
-	T      // Direct embedding of T interface
-	orig   ET
+	T
 	logger func(string)
 }
 
@@ -42,7 +40,6 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 
 	wrapped := &replaceLoggerT[ET]{
 		T:      t,
-		orig:   t,
 		logger: logger,
 	}
 	return any(wrapped).(T)
@@ -61,12 +58,12 @@ func (t replaceLoggerT[ET]) Logf(format string, args ...interface{}) {
 
 // Run implements the new RunT interface
 func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.orig).(interface {
+	if runnable, ok := any(t.T).(interface {
 		Run(string, func(*testing.T)) bool
 	}); ok {
 		return runnable.Run(name, f)
 	}
-	t.T.Logf("Run not supported by %T", t.orig)
+	t.T.Logf("Run not supported by %T", t.T)
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.FailNow()
 	return false
@@ -74,7 +71,7 @@ func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 
 // ReWrap implements ReWrapper to recreate replaceLoggerT with fresh *testing.T
 func (t replaceLoggerT[ET]) ReWrap(newT *testing.T) T {
-	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
+	if reWrapper, ok := any(t.T).(ReWrapper); ok {
 		rewrapped := reWrapper.ReWrap(newT)
 		return ReplaceLogger(rewrapped, t.logger)
 	}
@@ -83,7 +80,7 @@ func (t replaceLoggerT[ET]) ReWrap(newT *testing.T) T {
 
 // AdjustSkipFrames forwards to the underlying logger if it supports it
 func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
@@ -101,20 +98,20 @@ func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames += skip
 	// Also forward to the underlying T if it supports AdjustSkipFrames
-	if adjuster, ok := any(t.orig).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
 
 // Run implements the new RunT interface that expects func(*testing.T)
 func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	// Delegate to the underlying orig's Run method
-	if runnable, ok := any(t.orig).(interface {
+	// Delegate to the underlying T's Run method
+	if runnable, ok := any(t.T).(interface {
 		Run(string, func(*testing.T)) bool
 	}); ok {
 		return runnable.Run(name, f)
 	}
-	t.T.Logf("Run not supported by %T", t.orig)
+	t.T.Logf("Run not supported by %T", t.T)
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.FailNow()
 	return false
@@ -123,14 +120,13 @@ func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
 // ReWrap implements ReWrapper to recreate loggerT with fresh *testing.T
 func (t loggerT[ET]) ReWrap(newT *testing.T) T {
 	// Simple approach: let the underlying layer handle ReWrap if it supports it
-	if reWrapper, ok := any(t.orig).(ReWrapper); ok {
+	if reWrapper, ok := any(t.T).(ReWrapper); ok {
 		reWrapper.ReWrap(newT)
 	}
 
 	// Create new loggerT with the same logger function but fresh underlying
 	wrapped := &loggerT[*testing.T]{
 		T:          newT,
-		orig:       newT,
 		logger:     t.logger, // Reuse the same logger function
 		skipFrames: t.skipFrames,
 	}
@@ -235,7 +231,6 @@ func BufferedLogger[ET T](t ET) T {
 
 	wrapped := &loggerT[ET]{
 		T:          t, // Direct embedding of T interface
-		orig:       t, // Keep reference to original
 		skipFrames: 0, // Initialize skip frames, will be adjusted by AdjustSkipFrames
 	}
 
