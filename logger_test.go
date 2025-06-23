@@ -305,6 +305,14 @@ func (m *mockedT) triggerCleanup() {
 	}
 }
 
+func (m *mockedT) Fail() {
+	m.failed = true
+}
+
+func (m *mockedT) Parallel() {
+	// No-op for mock - parallel execution not relevant for mock
+}
+
 func (m *mockedT) setFailed() {
 	m.failed = true
 }

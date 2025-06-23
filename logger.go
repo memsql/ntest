@@ -11,7 +11,7 @@ import (
 )
 
 type loggerT[ET T] struct {
-	runTHelper    // Embeds T and provides Fail/Parallel
+	T             // Direct embedding of T interface
 	orig       ET // Keep reference to original for Run method
 	logger     func(string)
 	skipFrames int // Additional skip frames for nested wrappers
@@ -19,7 +19,7 @@ type loggerT[ET T] struct {
 
 // replaceLoggerT directly implements T interface to avoid double loggerT wrapping
 type replaceLoggerT[ET T] struct {
-	runTHelper
+	T      // Direct embedding of T interface
 	orig   ET
 	logger func(string)
 }
@@ -41,9 +41,9 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	}
 
 	wrapped := &replaceLoggerT[ET]{
-		runTHelper: runTHelper{T: t},
-		orig:       t,
-		logger:     logger,
+		T:      t,
+		orig:   t,
+		logger: logger,
 	}
 	return any(wrapped).(T)
 }
@@ -129,7 +129,7 @@ func (t loggerT[ET]) ReWrap(newT *testing.T) T {
 
 	// Create new loggerT with the same logger function but fresh underlying
 	wrapped := &loggerT[*testing.T]{
-		runTHelper: runTHelper{T: newT},
+		T:          newT,
 		orig:       newT,
 		logger:     t.logger, // Reuse the same logger function
 		skipFrames: t.skipFrames,
@@ -234,9 +234,9 @@ func BufferedLogger[ET T](t ET) T {
 	}
 
 	wrapped := &loggerT[ET]{
-		runTHelper: runTHelper{T: t}, // Set the embedded helper
-		orig:       t,                // Keep reference to original
-		skipFrames: 0,                // Initialize skip frames, will be adjusted by AdjustSkipFrames
+		T:          t, // Direct embedding of T interface
+		orig:       t, // Keep reference to original
+		skipFrames: 0, // Initialize skip frames, will be adjusted by AdjustSkipFrames
 	}
 
 	// Create the logger function that uses the current skipFrames from wrapped

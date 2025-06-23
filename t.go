@@ -11,6 +11,8 @@ type T interface {
 	Setenv(key, value string)
 	Error(args ...interface{})
 	Errorf(format string, args ...interface{})
+	Fail()
+	Parallel()
 	FailNow()
 	Failed() bool
 	Fatal(args ...interface{})
@@ -30,15 +32,13 @@ type T interface {
 type RunT interface {
 	T
 	Run(string, func(*testing.T)) bool
-	Parallel()
 }
 
 // NewTestRunner creates a test runner that works with matrix testing by
 // upgrading a T to a RunT.
 // This is useful for converting T types to work with matrix testing functions.
 // If the concrete type underlying T doesn't implement Run then the
-// test will fail if Run is called. If the underlying type doesn't implement
-// Parallel, then the test won't be parallel.
+// test will fail if Run is called.
 func NewTestRunner(t T) RunT {
 	if runT, ok := t.(RunT); ok {
 		return runT
@@ -61,36 +61,6 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	s.T.FailNow()
 	return false
-}
-
-func (s simpleRunT) Parallel() {
-	if parallel, ok := s.orig.(interface{ Parallel() }); ok {
-		parallel.Parallel()
-	}
-}
-
-// runTHelper is a tiny wrapper around T that provides Fail and Parallel methods
-// by casting to appropriate interfaces. This can be embedded since it's not parameterized.
-type runTHelper struct {
-	T
-}
-
-func (r runTHelper) Fail() {
-	if failer, ok := r.T.(interface{ Fail() }); ok {
-		failer.Fail()
-		return
-	}
-	// Fallback
-	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	r.T.FailNow()
-}
-
-func (r runTHelper) Parallel() {
-	if parallel, ok := r.T.(interface{ Parallel() }); ok {
-		parallel.Parallel()
-		return
-	}
-	// If not supported, we just continue - parallel is optional
 }
 
 // RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.
