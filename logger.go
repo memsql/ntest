@@ -68,8 +68,8 @@ func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	return false
 }
 
-// ReWrap implements ReWrapper to recreate replaceLoggerT with fresh *testing.T
-func (t replaceLoggerT[ET]) ReWrap(newT *testing.T) T {
+// ReWrap implements ReWrapper to recreate replaceLoggerT with fresh T
+func (t replaceLoggerT[ET]) ReWrap(newT T) T {
 	if reWrapper, ok := any(t.T).(ReWrapper); ok {
 		rewrapped := reWrapper.ReWrap(newT)
 		return ReplaceLogger(rewrapped, t.logger)
@@ -84,8 +84,8 @@ func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
 	}
 }
 
-// ReWrap implements ReWrapper to recreate loggerT with fresh *testing.T
-func (t loggerT[ET]) ReWrap(newT *testing.T) T {
+// ReWrap implements ReWrapper to recreate loggerT with fresh T
+func (t loggerT[ET]) ReWrap(newT T) T {
 	// Delegate to the embedded replaceLoggerT's ReWrap to handle chaining properly
 	reWrappedBase := t.replaceLoggerT.ReWrap(newT)
 
@@ -224,8 +224,8 @@ func AsRunT[ET T](t ET) RunT {
 	return NewTestRunner(t)
 }
 
-// ReWrapper allows types that wrap T to recreate themselves from fresh *testing.T
+// ReWrapper allows types that wrap T to recreate themselves from fresh T
 // This enables proper sub-test handling in matrix testing while preserving wrapper behavior
 type ReWrapper interface {
-	ReWrap(*testing.T) T
+	ReWrap(T) T
 }
