@@ -37,11 +37,10 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 		adjuster.AdjustSkipFrames(2) // +2 for replaceLoggerT.Log and the custom logger function
 	}
 
-	wrapped := &replaceLoggerT[ET]{
+	return &replaceLoggerT[ET]{
 		T:      t,
 		logger: logger,
 	}
-	return any(wrapped).(T)
 }
 
 func (t replaceLoggerT[ET]) Log(args ...interface{}) {
