@@ -196,8 +196,14 @@ func TestEmptyMatrix(t *testing.T) {
 func TestRunWithReWrap(t *testing.T) {
 	t.Parallel()
 
-	// Test with a logger that implements ReWrapper
-	logger := ntest.ExtraDetailLogger(t, "RWRW-")
+	// Capture log output to verify layering is preserved
+	var capturedLogs []string
+	captureLogger := ntest.ReplaceLogger(t, func(s string) {
+		capturedLogs = append(capturedLogs, s)
+	})
+
+	// Test with a logger that implements ReWrapper - wrap the capture logger with ExtraDetailLogger
+	logger := ntest.ExtraDetailLogger(captureLogger, "RWRW-")
 	runT := ntest.AsRunT(logger)
 
 	var subTestRan bool
@@ -209,6 +215,18 @@ func TestRunWithReWrap(t *testing.T) {
 
 	assert.True(t, success, "RunWithReWrap should succeed")
 	assert.True(t, subTestRan, "Subtest should have run")
+
+	// Verify that the logger layering was preserved in the rewrapped logger
+	require.Len(t, capturedLogs, 2, "Should have captured 2 log messages")
+
+	// Both messages should have the RWRW- prefix and timestamp format
+	assert.Contains(t, capturedLogs[0], "RWRW-", "First message should have prefix")
+	assert.Contains(t, capturedLogs[0], "This should be prefixed and timestamped", "First message should contain original text")
+	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[0], "First message should have timestamp")
+
+	assert.Contains(t, capturedLogs[1], "RWRW-", "Second message should have prefix")
+	assert.Contains(t, capturedLogs[1], "Formatted message: test", "Second message should contain formatted text")
+	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[1], "Second message should have timestamp")
 }
 
 // TestLoggerRun tests the Run methods on logger types with unsupported underlying types

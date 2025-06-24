@@ -56,15 +56,16 @@ func (t replaceLoggerT[ET]) Logf(format string, args ...interface{}) {
 }
 
 // Run implements the new RunT interface
+// Note: This passes the raw *testing.T to the function, losing logger wrapping.
+// Use RunWithReWrap instead if you need to preserve logger wrapping in subtests.
 func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.T).(interface {
-		Run(string, func(*testing.T)) bool
-	}); ok {
+	if runnable, ok := any(t.T).(RunT); ok {
 		return runnable.Run(name, f)
 	}
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.Logf("Run not supported by %T", t.T)
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	t.T.FailNow()
+	t.T.Fail()
 	return false
 }
 
