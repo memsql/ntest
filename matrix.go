@@ -45,7 +45,7 @@ func runMatrixTest(t RunT, parallel bool, chain []any) {
 	matrix, before, after := breakChain(chain)
 	if matrix == nil {
 		t.Log("FAIL: matrix test requires a matrix")
-		t.FailNow()
+		t.Fail()
 		return
 	}
 

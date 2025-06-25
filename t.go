@@ -59,7 +59,7 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	s.T.Logf("Run not supported by %T", s.orig)
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	s.T.FailNow()
+	s.T.Fail()
 	return false
 }
 
