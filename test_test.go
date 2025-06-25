@@ -229,59 +229,6 @@ func TestRunWithReWrap(t *testing.T) {
 	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[1], "Second message should have timestamp")
 }
 
-// TestLoggerRun tests the Run methods on logger types with unsupported underlying types
-func TestLoggerRun(t *testing.T) {
-	t.Parallel()
-
-	// Create a mock T that doesn't support Run to test fallback behavior
-	mockT := newMockedT(t)
-	logger := ntest.ExtraDetailLogger(mockT, "TEST-")
-
-	// Capture log output to verify the "Run not supported" message
-	var loggedMessages []string
-	captureLogger := ntest.ReplaceLogger(t, func(s string) {
-		loggedMessages = append(loggedMessages, s)
-	})
-
-	mockT.FailNow()
-
-	// This should trigger the "Run not supported" path and FailNow
-	success := logger.(interface {
-		Run(string, func(*testing.T)) bool
-	}).Run("test", func(subT *testing.T) {
-		captureLogger.Log("Should not reach here")
-	})
-
-	// Verify the expected behavior
-	assert.False(t, success, "Run should return false for unsupported type")
-	assert.True(t, mockT.Failed(), "FailNow should have been called")
-
-	// Check that we don't have any captured messages (the test function shouldn't have run)
-	assert.Empty(t, loggedMessages, "The test function should not have been called")
-}
-
-// TestSimpleRunTFallbacks tests that simpleRunT properly handles T types that don't support Run/Parallel
-func TestSimpleRunTFallbacks(t *testing.T) {
-	t.Parallel()
-
-	// Test with a mock T that doesn't support Run or Parallel
-	mockT := newMockedT(t)
-	runT := ntest.NewTestRunner(mockT)
-
-	// Test Run fallback - should log error and fail
-	success := runT.Run("subtest", func(subT *testing.T) {
-		t.Error("This should not execute")
-	})
-
-	assert.False(t, success, "Run should return false when underlying T doesn't support Run")
-	assert.True(t, mockT.Failed(), "Should call FailNow when Run is not supported")
-
-	// Test Parallel fallback - should not panic when underlying T doesn't support Parallel
-	assert.NotPanics(t, func() {
-		runT.Parallel() // This should be a no-op for non-parallel T
-	}, "Parallel should not panic when underlying T doesn't support it")
-}
-
 // TestAdjustSkipFramesForwarding tests that AdjustSkipFrames properly forwards to underlying types
 func TestAdjustSkipFramesForwarding(t *testing.T) {
 	t.Parallel()

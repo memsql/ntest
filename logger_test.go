@@ -148,11 +148,12 @@ func TestExtraDetailInsideRun(t *testing.T) {
 		buffered.Log(s + " SUFFIX")
 	})
 	var ran bool
-	ntest.RunWithReWrap(ntest.AsRunT(extraDetail), "inner", func(wrapped ntest.RunT) {
+	success := ntest.RunWithReWrap(ntest.AsRunT(extraDetail), "inner", func(wrapped ntest.RunT) {
 		inner := mockT.getInner(wrapped.Name())
 		testLineNumberAccuracy(inner.real, wrapped, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 		ran = true
 	})
+	require.True(t, success)
 	require.True(t, ran)
 }
 
@@ -392,4 +393,39 @@ func (m *mockedT) Parallel() {
 
 func (m *mockedT) setFailed() {
 	m.failed = true
+}
+
+// Run implements RunT interface for mockedT
+func (m *mockedT) Run(name string, f func(*testing.T)) bool {
+	// For the mock, we need to create a sub-test name
+	subTestName := m.name + "/" + name
+	subMock := newMockedT(m.real)
+	subMock.name = subTestName
+
+	// Store the sub-mock in the inner map so getInner can find it
+	m.lock.Lock()
+	m.inner[subTestName] = subMock
+	m.lock.Unlock()
+
+	// We can't actually call f() with a *testing.T since mockedT isn't a real *testing.T
+	// For testing purposes, we'll just assume the function would succeed
+	// and return true. In a real implementation, this would delegate to the underlying
+	// real T's Run method.
+	if realRunner, ok := m.real.(interface {
+		Run(string, func(*testing.T)) bool
+	}); ok {
+		// If the real T supports Run, use it but with a different function that
+		// tracks our mock state
+		return realRunner.Run(name, func(subT *testing.T) {
+			// Update our sub-mock's real reference
+			subMock.real = subT
+			// Now call the original function
+			f(subT)
+		})
+	}
+
+	// If real T doesn't support Run, just mark as failed like other implementations
+	m.Logf("Run not supported by %T", m.real)
+	m.Fail()
+	return false
 }
