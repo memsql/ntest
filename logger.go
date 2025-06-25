@@ -223,9 +223,3 @@ func AsRunT[ET T](t ET) RunT {
 	// Otherwise, wrap it using NewTestRunner
 	return NewTestRunner(t)
 }
-
-// ReWrapper allows types that wrap T to recreate themselves from fresh T
-// This enables proper sub-test handling in matrix testing while preserving wrapper behavior
-type ReWrapper interface {
-	ReWrap(T) T
-}

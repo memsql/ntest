@@ -182,7 +182,7 @@ func TestExtra(t *testing.T) {
 
 func TestEmptyMatrix(t *testing.T) {
 	t.Parallel()
-	mk := newMockedT(t.Name())
+	mk := newMockedT(t)
 	ntest.RunMatrix(ntest.AsRunT(mk),
 		func() int { return 7 },
 		func(t *testing.T, i int) {
@@ -234,7 +234,7 @@ func TestLoggerRun(t *testing.T) {
 	t.Parallel()
 
 	// Create a mock T that doesn't support Run to test fallback behavior
-	mockT := newMockedT(t.Name())
+	mockT := newMockedT(t)
 	logger := ntest.ExtraDetailLogger(mockT, "TEST-")
 
 	// Capture log output to verify the "Run not supported" message
@@ -265,7 +265,7 @@ func TestSimpleRunTFallbacks(t *testing.T) {
 	t.Parallel()
 
 	// Test with a mock T that doesn't support Run or Parallel
-	mockT := newMockedT("TestSimpleRunTFallbacks")
+	mockT := newMockedT(t)
 	runT := ntest.NewTestRunner(mockT)
 
 	// Test Run fallback - should log error and fail

@@ -65,7 +65,8 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 
 // RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.
 // This should be used instead of calling t.Run in tests that use
-// ReplaceLogger, BufferedLogger, or ExtraDetailLogger.
+// ReplaceLogger, BufferedLogger, or ExtraDetailLogger. If running a test with a
+// wrapped logger that supports ReWrap, use RunWithReWrap.
 func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 	return t.Run(name, func(subT *testing.T) {
 		var reWrapped RunT
@@ -76,4 +77,10 @@ func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 		}
 		f(reWrapped)
 	})
+}
+
+// ReWrapper allows types that wrap T to recreate themselves from fresh T
+// This enables proper sub-test handling in matrix testing while preserving wrapper behavior
+type ReWrapper interface {
+	ReWrap(T) T
 }
