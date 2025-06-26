@@ -171,6 +171,10 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 //
 // If the environment variable NTEST_BUFFERING is set to "false", buffering
 // will be turned off and the original T will be returned directly.
+//
+// One advantage of using BufferedLogger over using "go test" (without -v) is
+// that you can see the skipped tests with BufferedLogger whereas non-v go test
+// hides the skips.
 func BufferedLogger[ET T](t ET) T {
 	if os.Getenv("NTEST_BUFFERING") == "false" {
 		// When buffering is disabled, return the original T directly to avoid any intermediate calls
