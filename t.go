@@ -40,6 +40,7 @@ func RunWithReWrap(t T, name string, f func(T)) bool {
 	if !ok {
 		t.Logf("Run not supported by %T", t)
 		t.Fail()
+		return false
 	}
 	return runT.Run(name, func(subT *testing.T) {
 		var reWrapped T

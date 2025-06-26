@@ -50,11 +50,13 @@ func runMatrixTest(t T, parallel bool, chain []any) {
 	if !ok {
 		t.Logf("Run not supported by %T", t)
 		t.Fail()
+		return
 	}
 	matrix, before, after := breakChain(chain)
 	if matrix == nil {
 		t.Log("FAIL: matrix test requires a matrix")
 		t.Fail()
+		return
 	}
 
 	var startTest func(T, map[string]nject.Provider, []any, []any)
