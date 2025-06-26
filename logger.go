@@ -78,7 +78,8 @@ func (t replaceLoggerT[ET]) ReWrap(newT T) T {
 	return ReplaceLogger(newT, t.logger)
 }
 
-// AdjustSkipFrames forwards to the underlying logger if it supports it
+// AdjustSkipFrames forwards to the underlying logger if it supports it. This
+// is a delta not an absolute.
 func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
 	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)

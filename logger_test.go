@@ -138,6 +138,28 @@ func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 }
 
+func TestReplaceLogger_WithBufferedLogger_AdjustSkipFrames_LineNumberAccuracy(t *testing.T) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
+		// extra layers of function calls
+		func() {
+			// extra layers of function calls
+			func() {
+				buffered.Log(s + " SUFFIX")
+			}()
+		}()
+	})
+	asf, ok := extraDetail.(interface{ AdjustSkipFrames(int) })
+	require.True(t, ok)
+	asf.AdjustSkipFrames(1)
+	asf.AdjustSkipFrames(1)
+	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+}
+
 func TestExtraDetailInsideRun(t *testing.T) {
 	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
 		t.Setenv("NTEST_BUFFERING", "true")
