@@ -212,15 +212,3 @@ func BufferedLogger[ET T](t ET) T {
 
 	return wrapped // Return by reference so AdjustSkipFrames works
 }
-
-// AsRunT upgrades a T to RunT for use with matrix testing.
-// Use this helper when you have a T and need to use it with matrix testing functions.
-func AsRunT[ET T](t ET) RunT {
-	// If t already implements RunT, return it directly
-	if runT, ok := any(t).(RunT); ok {
-		return runT
-	}
-
-	// Otherwise, wrap it using NewTestRunner
-	return NewTestRunner(t)
-}
