@@ -112,7 +112,7 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 		lock.Lock()
 		defer lock.Unlock()
 		cleanupCalled = true
-		if t.Failed() && len(entries) > 0 {
+		if (t.Failed() || t.Skipped()) && len(entries) > 0 {
 			var buffer strings.Builder
 			var size int
 			for _, entry := range entries {
