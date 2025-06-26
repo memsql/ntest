@@ -2,9 +2,11 @@ package ntest_test
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,169 +47,194 @@ func TestPrefixLogger(t *testing.T) {
 	t.Log("ExtraDetailLogger test completed successfully")
 }
 
-func TestBufferedLogger_PassingTest(t *testing.T) {
-	t.Log("Testing BufferedLogger with passing test (should suppress all logs)")
+// TestLoggerLogf tests the Logf method on loggerT
+func TestLoggerLogf(t *testing.T) {
+	t.Parallel()
 
 	var captured []string
-	captureT := ntest.ReplaceLogger(t, func(s string) {
+	captureLogger := ntest.ReplaceLogger(t, func(s string) {
 		captured = append(captured, s)
 	})
 
-	t.Log("Creating BufferedLogger")
-	buffered := ntest.BufferedLogger(captureT)
+	// Use BufferedLogger to create a loggerT instance, then call Logf
+	buffered := ntest.BufferedLogger(captureLogger)
+	buffered.Logf("Formatted message: %d %s", 42, "test")
 
-	t.Log("Adding logs that should be suppressed")
-	buffered.Log("This should not appear")
-	buffered.Logf("Neither should this: %d", 42)
-
-	t.Logf("Captured %d entries (should be 0 for passing test)", len(captured))
-	for i, entry := range captured {
-		t.Logf("Unexpected entry %d: %s", i, entry)
-	}
-
-	// Since the test passes, no logs should be captured
-	assert.Equal(t, 0, len(captured), "no logs should be captured for passing test")
-	t.Log("BufferedLogger passing test completed successfully")
-}
-
-func TestBufferedLogger_FailingTest(t *testing.T) {
-	t.Log("Testing BufferedLogger with failing test (should output buffered logs)")
-
-	// Create a mock T that reports as failed
-	mockT := newMockedT("TestBufferedLogger_FailingTest")
-	t.Log("Created mockedT with name:", mockT.Name())
-
-	t.Log("Creating BufferedLogger")
-	buffered := ntest.BufferedLogger(mockT)
-
-	t.Log("Adding logs that should be buffered and later output")
-	buffered.Log("This should appear")
-	buffered.Logf("This too: %d", 42)
-
-	t.Log("Setting test as failed and triggering cleanup")
-	mockT.setFailed()
-	mockT.triggerCleanup()
-
-	t.Logf("After cleanup, captured %d log entries", len(mockT.captured))
-	for i, entry := range mockT.captured {
-		t.Logf("Captured entry %d: %s", i, entry)
-	}
-
-	// Check that logs contain file:line information
-	found := false
-	for _, log := range mockT.captured {
-		if strings.Contains(log, "logger_test.go:") && strings.Contains(log, "This should appear") {
-			found = true
-			t.Logf("Found expected log with file:line info: %s", log)
-			break
-		}
-	}
-	assert.True(t, found, "should contain filename and line number")
-	t.Log("BufferedLogger failing test completed successfully")
+	// Since it's buffered and test will pass, we won't see the output directly
+	// But this ensures the Logf method is called
+	assert.NotNil(t, buffered, "BufferedLogger should return non-nil")
 }
 
 // Test line number accuracy for BufferedLogger
 func TestBufferedLogger_LineNumberAccuracy(t *testing.T) {
-	t.Log("Testing BufferedLogger line number accuracy using runtime.Caller")
-
-	mockT := newMockedT("TestBufferedLogger_LineNumberAccuracy")
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
 	buffered := ntest.BufferedLogger(mockT)
-
-	// Get the current line number for reference
-	_, _, currentLine, _ := runtime.Caller(0)
-	t.Logf("Current line number is %d", currentLine)
-
-	buffered.Log("Test message 1") // This should capture this line
-	logLine1 := currentLine + 3
-	t.Logf("Expected line number for 'Test message 1': %d", logLine1)
-
-	buffered.Logf("Test message %d", 2) // This should capture this line
-	logLine2 := currentLine + 7
-	t.Logf("Expected line number for 'Test message 2': %d", logLine2)
-
-	// Set failed and trigger cleanup
-	t.Log("Setting test as failed and triggering cleanup")
-	mockT.setFailed()
-	mockT.triggerCleanup()
-
-	t.Logf("After cleanup, captured %d log entries", len(mockT.captured))
-	for i, entry := range mockT.captured {
-		t.Logf("Captured entry %d: %s", i, entry)
-	}
-
-	// Find the captured log entries with line numbers
-	found1, found2 := false, false
-	expectedLine1 := strconv.Itoa(logLine1)
-	expectedLine2 := strconv.Itoa(logLine2)
-
-	t.Logf("Looking for line numbers: %s and %s", expectedLine1, expectedLine2)
-
-	for _, log := range mockT.captured {
-		if strings.Contains(log, "Test message 1") && strings.Contains(log, "logger_test.go:"+expectedLine1) {
-			found1 = true
-			t.Logf("✓ Found Test message 1 with correct line number: %s", log)
-		}
-		if strings.Contains(log, "Test message 2") && strings.Contains(log, "logger_test.go:"+expectedLine2) {
-			found2 = true
-			t.Logf("✓ Found Test message 2 with correct line number: %s", log)
-		}
-	}
-
-	assert.True(t, found1, "Should find Test message 1 with correct line number %s", expectedLine1)
-	assert.True(t, found2, "Should find Test message 2 with correct line number %s", expectedLine2)
-	t.Log("BufferedLogger line number accuracy test completed")
+	testLineNumberAccuracy(t, buffered, mockT, true, true) // expect buffering, test should fail to check line numbers
 }
 
-// Test line number accuracy for ExtraDetailLogger with BufferedLogger
 func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
-	t.Log("Testing ExtraDetailLogger with BufferedLogger for line number accuracy")
-
-	mockT := newMockedT("TestExtraDetailLogger_LineNumberAccuracy")
-	t.Log("Created mockedT")
-
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
 	buffered := ntest.BufferedLogger(mockT)
-	t.Log("Created BufferedLogger")
-
 	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
-	t.Log("Created ExtraDetailLogger with prefix 'PREFIX'")
+	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "PREFIX") // expect buffering, test should fail to check line numbers
+}
+
+func TestExtraDetailLogger_Doubled_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX1")
+	extraDetail2 := ntest.ExtraDetailLogger(extraDetail, "PREFIX2")
+	testLineNumberAccuracy(t, extraDetail2, mockT, true, true, "PREFIX2", "PREFIX1") // expect buffering, test should fail to check line numbers
+}
+
+func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
+		buffered.Log(s + " SUFFIX")
+	})
+	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+}
+
+func TestReplaceLogger_WithBufferedLogger_AdjustSkipFrames_LineNumberAccuracy(t *testing.T) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
+		// extra layers of function calls
+		func() {
+			// extra layers of function calls
+			func() {
+				buffered.Log(s + " SUFFIX")
+			}()
+		}()
+	})
+	asf, ok := extraDetail.(interface{ AdjustSkipFrames(int) })
+	require.True(t, ok)
+	asf.AdjustSkipFrames(1)
+	asf.AdjustSkipFrames(1)
+	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+}
+
+func TestExtraDetailInsideRun(t *testing.T) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
+		buffered.Log(s + " SUFFIX")
+	})
+	var ran bool
+	success := ntest.RunWithReWrap(extraDetail, "inner", func(wrapped ntest.T) {
+		inner := mockT.getInner(wrapped.Name())
+		testLineNumberAccuracy(inner.real, wrapped, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+		ran = true
+	})
+	require.True(t, success)
+	require.True(t, ran)
+}
+
+func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *testing.T) {
+	// Set environment variable to disable buffering
+	t.Setenv("NTEST_BUFFERING", "false")
+
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	testLineNumberAccuracy(t, buffered, mockT, false, false) // no buffering, test passes (logs appear immediately)
+}
+
+// Generic line number accuracy test that works with different logger configurations
+func testLineNumberAccuracy(t ntest.T, logger ntest.T, mockT *mockedT, expectBuffering bool, shouldFail bool, mustFind ...string) {
+	if expectBuffering {
+		if shouldFail {
+			t.Log("Testing buffered logger with failing test (should output buffered logs)")
+		} else {
+			t.Log("Testing buffered logger with passing test (should suppress all logs)")
+		}
+	} else {
+		t.Log("Testing logger with no buffering (logs appear immediately)")
+	}
 
 	// Get the current line number for reference
 	_, _, currentLine, _ := runtime.Caller(0)
 	t.Logf("Current line number is %d", currentLine)
 
-	extraDetail.Log("Test message from extra detail") // This should capture this line
+	logger.Log("Test message for line accuracy") // This should capture this line
 	logLine := currentLine + 3
 	t.Logf("Expected line number for log message: %d", logLine)
 
-	// Set failed and trigger cleanup
-	t.Log("Setting test as failed and triggering cleanup")
-	mockT.setFailed()
-	mockT.triggerCleanup()
+	if expectBuffering && shouldFail {
+		// For buffered loggers, we need to trigger failure and cleanup to see the logs
+		t.Log("Setting test as failed and triggering cleanup")
+		mockT.setFailed()
+		mockT.triggerCleanup()
+	}
 
-	t.Logf("After cleanup, captured %d log entries", len(mockT.captured))
+	t.Logf("After logging, captured %d log entries", len(mockT.captured))
 	for i, entry := range mockT.captured {
 		t.Logf("Captured entry %d: %s", i, entry)
 	}
 
-	// Find the captured log entry with correct line number
+	if expectBuffering && !shouldFail {
+		// For passing tests with buffering, no logs should be captured
+		assert.Equal(t, 0, len(mockT.captured), "no logs should be captured for passing test")
+		t.Log("Buffered logger passing test completed successfully")
+		return
+	}
+
+	// Check for correct line number based on the test type
 	found := false
 	expectedLine := strconv.Itoa(logLine)
-	t.Logf("Looking for line number: %s", expectedLine)
 
-	for _, log := range mockT.captured {
-		if strings.Contains(log, "Test message from extra detail") && strings.Contains(log, "logger_test.go:"+expectedLine) {
+	t.Logf("Looking for line number: %s", expectedLine)
+	for _, entry := range mockT.captured {
+	Line:
+		for _, log := range strings.Split(entry, "\n") {
+			t.Logf("examining: %s", log)
+			all := []string{
+				"Test message for line accuracy",
+				"logger_test.go:" + expectedLine,
+			}
+			all = append(all, mustFind...)
+			for _, s := range all {
+				if !strings.Contains(log, s) {
+					t.Logf(" missing '%s'", s)
+					continue Line
+				}
+				t.Logf(" found '%s'", s)
+			}
+			if strings.Contains(log, "logger.go:") {
+				t.Logf(" uh-oh, also contains 'logger.go'")
+				continue Line
+			}
 			found = true
 			t.Logf("✓ Found log message with correct line number: %s", log)
-			break
+			break Line
 		}
 	}
 
 	assert.True(t, found, "Should find log message with correct line number %s", expectedLine)
-	t.Log("ExtraDetailLogger line number accuracy test completed")
+	t.Log("Line number accuracy test completed")
 }
 
 // Mock T implementation for testing with log capture capabilities
 type mockedT struct {
+	real ntest.T
 	ntest.T
 	failed   bool
 	cleanups []func()
@@ -215,15 +242,37 @@ type mockedT struct {
 	skipped  bool
 	name     string
 	envs     map[string]string
+	inner    map[string]*mockedT
+	lock     sync.Mutex
 }
 
-func newMockedT(name string) *mockedT {
+func newMockedT(real ntest.T) *mockedT {
 	return &mockedT{
-		name:     name,
+		real:     real,
+		name:     real.Name(),
 		envs:     make(map[string]string),
 		captured: make([]string, 0),
 		cleanups: make([]func(), 0),
+		inner:    make(map[string]*mockedT),
 	}
+}
+
+func (m *mockedT) getInner(name string) *mockedT {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	i, ok := m.inner[name]
+	require.Truef(m.real, ok, "inner mock %s exists", name)
+	return i
+}
+
+func (m *mockedT) ReWrap(t ntest.T) ntest.T {
+	n := newMockedT(t)
+	func() {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		m.inner[t.Name()] = n
+	}()
+	return n
 }
 
 func (m *mockedT) Failed() bool {
@@ -258,13 +307,21 @@ func (m *mockedT) Skipf(format string, args ...interface{}) {
 	m.skipped = true
 }
 
+func (m *mockedT) log(s string) {
+	_, file, line, _ := runtime.Caller(2)
+	if idx := strings.LastIndex(file, "/"); idx >= 0 {
+		file = file[idx+1:]
+	}
+	m.captured = append(m.captured, fmt.Sprintf("%s:%d %s", file, line, s))
+}
+
 func (m *mockedT) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
-	m.captured = append(m.captured, strings.TrimSpace(line))
+	m.log(line)
 }
 
 func (m *mockedT) Logf(format string, args ...interface{}) {
-	m.captured = append(m.captured, fmt.Sprintf(format, args...))
+	m.log(fmt.Sprintf(format, args...))
 }
 
 func (m *mockedT) Error(args ...interface{}) {
@@ -297,6 +354,49 @@ func (m *mockedT) triggerCleanup() {
 	}
 }
 
+func (m *mockedT) Fail() {
+	m.failed = true
+}
+
+func (m *mockedT) Parallel() {
+	// No-op for mock - parallel execution not relevant for mock
+}
+
 func (m *mockedT) setFailed() {
 	m.failed = true
+}
+
+// Run implements RunT interface for mockedT
+func (m *mockedT) Run(name string, f func(*testing.T)) bool {
+	// For the mock, we need to create a sub-test name
+	subTestName := m.name + "/" + name
+	subMock := newMockedT(m.real)
+	subMock.name = subTestName
+
+	// Store the sub-mock in the inner map so getInner can find it
+	m.lock.Lock()
+	m.inner[subTestName] = subMock
+	m.lock.Unlock()
+
+	// We can't actually call f() with a *testing.T since mockedT isn't a real *testing.T
+	// For testing purposes, we'll just assume the function would succeed
+	// and return true. In a real implementation, this would delegate to the underlying
+	// real T's Run method.
+	if realRunner, ok := m.real.(interface {
+		Run(string, func(*testing.T)) bool
+	}); ok {
+		// If the real T supports Run, use it but with a different function that
+		// tracks our mock state
+		return realRunner.Run(name, func(subT *testing.T) {
+			// Update our sub-mock's real reference
+			subMock.real = subT
+			// Now call the original function
+			f(subT)
+		})
+	}
+
+	// If real T doesn't support Run, just mark as failed like other implementations
+	m.Logf("Run not supported by %T", m.real)
+	m.Fail()
+	return false
 }

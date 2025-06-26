@@ -145,7 +145,7 @@ This is easily handled with `t.Cleanup()`
 ## Abort vs nject.TerminalError
 
 If the injection chains used in tests are only used in tests, then when
-something goes wrong in an injector, it can simply abort (`t.FailNow()`) the test.
+something goes wrong in an injector, it can simply abort (`t.Fail()`) the test.
 
 If the injection chains are shared with non-test code, then instead
 of aborting, injectors can return
