@@ -25,54 +25,28 @@ type T interface {
 	Skipped() bool
 }
 
-// RunT adds Run() to T.
-// *testing.T satisfies the RunT interface.
-type RunT interface {
+type runner interface {
 	T
 	Run(string, func(*testing.T)) bool
-}
-
-// NewTestRunner creates a test runner that works with matrix testing by
-// upgrading a T to a RunT. It checks to see if the T is actually a RunT,
-// like *testing.T.
-// This is useful for converting T types to work with matrix testing functions.
-// If the concrete type underlying T doesn't implement Run then the
-// test will fail if Run is called.
-func NewTestRunner(t T) RunT {
-	if runT, ok := t.(RunT); ok {
-		return runT
-	}
-	return simpleRunT{T: t, orig: t}
-}
-
-// simpleRunT provides RunT functionality for plain T types
-type simpleRunT struct {
-	T
-	orig T
-}
-
-func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
-	if runT, ok := s.orig.(RunT); ok {
-		return runT.Run(name, f)
-	}
-	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	s.T.Logf("Run not supported by %T", s.orig)
-	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	s.T.Fail()
-	return false
 }
 
 // RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.
 // This should be used instead of calling t.Run in tests that use
 // ReplaceLogger, BufferedLogger, or ExtraDetailLogger. If running a test with a
-// wrapped logger that supports ReWrap, use RunWithReWrap instead of .Run().
-func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
-	return t.Run(name, func(subT *testing.T) {
-		var reWrapped RunT
+// wrapped T that supports ReWrap, use RunWithReWrap instead of .Run(). It can
+// also be used with Ts that do not support ReWrap.
+func RunWithReWrap(t T, name string, f func(T)) bool {
+	runT, ok := t.(runner)
+	if !ok {
+		t.Logf("Run not supported by %T", t)
+		t.Fail()
+	}
+	return runT.Run(name, func(subT *testing.T) {
+		var reWrapped T
 		if reWrapper, ok := t.(ReWrapper); ok {
-			reWrapped = NewTestRunner(reWrapper.ReWrap(subT))
+			reWrapped = reWrapper.ReWrap(subT)
 		} else {
-			reWrapped = NewTestRunner(subT)
+			reWrapped = subT
 		}
 		f(reWrapped)
 	})
@@ -83,16 +57,4 @@ func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 // that wrap T.
 type ReWrapper interface {
 	ReWrap(T) T
-}
-
-// AsRunT upgrades a T to RunT for use with matrix testing.
-// Use this helper when you have a T and need to use it with matrix testing functions.
-func AsRunT[ET T](t ET) RunT {
-	// If t already implements RunT, return it directly
-	if runT, ok := any(t).(RunT); ok {
-		return runT
-	}
-
-	// Otherwise, wrap it using NewTestRunner
-	return NewTestRunner(t)
 }

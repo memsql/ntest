@@ -22,7 +22,9 @@ import (
 //
 // Matrix values must be direct arguments to RunMatrix -- they will not be extracted
 // from nject.Sequences. RunParallelMatrix will fail if there is no matrix provided.
-func RunParallelMatrix(t RunT, chain ...any) {
+//
+// The provided T must support Run()
+func RunParallelMatrix(t T, chain ...any) {
 	t.Parallel()
 	runMatrixTest(t, true, chain)
 }
@@ -37,27 +39,33 @@ func RunParallelMatrix(t RunT, chain ...any) {
 //
 // Matrix values must be direct arguments to RunMatrix -- they will not be extracted
 // from nject.Sequences. RunMatrix will fail if there is no matrix provided.
-func RunMatrix(t RunT, chain ...any) {
+//
+// The provided T must support Run()
+func RunMatrix(t T, chain ...any) {
 	runMatrixTest(t, false, chain)
 }
 
-func runMatrixTest(t RunT, parallel bool, chain []any) {
+func runMatrixTest(t T, parallel bool, chain []any) {
+	_, ok := t.(runner)
+	if !ok {
+		t.Logf("Run not supported by %T", t)
+		t.Fail()
+	}
 	matrix, before, after := breakChain(chain)
 	if matrix == nil {
 		t.Log("FAIL: matrix test requires a matrix")
 		t.Fail()
-		return
 	}
 
-	var startTest func(RunT, map[string]nject.Provider, []any, []any)
-	startTest = func(t RunT, matrix map[string]nject.Provider, before []any, after []any) {
+	var startTest func(T, map[string]nject.Provider, []any, []any)
+	startTest = func(t T, matrix map[string]nject.Provider, before []any, after []any) {
 		for name, subChain := range matrix {
 			subChain := subChain
-			RunWithReWrap(t, name, func(reWrapped RunT) {
+			RunWithReWrap(t, name, func(reWrapped T) {
 				if parallel {
 					reWrapped.Parallel()
 				}
-				testingT := func(tInner RunT) []any {
+				testingT := func(tInner T) []any {
 					if tt, ok := tInner.(*testing.T); ok {
 						return []any{nject.Provide("testing.T", func() *testing.T { return tt })}
 					}

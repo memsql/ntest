@@ -35,18 +35,20 @@ func TestParallelMatrixTestingT(t *testing.T) {
 }
 
 func TestParallelMatrixExtraDetail(t *testing.T) {
-	testParallelMatrixLogger(ntest.AsRunT(ntest.ExtraDetailLogger(t, "TPMED-")))
+	testParallelMatrixLogger(ntest.ExtraDetailLogger(t, "TPMED-"))
 }
 
 func TestParallelMatrixBuffered(t *testing.T) {
-	testParallelMatrix(ntest.AsRunT(ntest.BufferedLogger(t)))
+	testParallelMatrix(ntest.BufferedLogger(t))
 }
 
 func TestParallelMatrixExtraBuffered(t *testing.T) {
-	testParallelMatrix(ntest.AsRunT(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-")))
+	testParallelMatrix(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-"))
 }
 
-func testParallelMatrix(t ntest.RunT) {
+func testParallelMatrix(justT ntest.T) {
+	t, ok := justT.(runner)
+	require.True(justT, ok)
 	var mu sync.Mutex
 	name := t.Name()
 	doneA := make(chan struct{})
@@ -94,7 +96,10 @@ func testParallelMatrix(t ntest.RunT) {
 	})
 }
 
-func testParallelMatrixLogger(t ntest.RunT) {
+func testParallelMatrixLogger(justT ntest.T) {
+	t, ok := justT.(runner)
+	require.True(justT, ok)
+
 	// Test that logger wrappers work with matrix testing (exercises ReWrap functionality)
 	t.Log("Testing logger wrapper functionality")
 	t.Logf("Logger wrapper test for type %T", t)
@@ -183,7 +188,7 @@ func TestExtra(t *testing.T) {
 func TestEmptyMatrix(t *testing.T) {
 	t.Parallel()
 	mk := newMockedT(t)
-	ntest.RunMatrix(ntest.AsRunT(mk),
+	ntest.RunMatrix(mk,
 		func() int { return 7 },
 		func(t *testing.T, i int) {
 			assert.Equal(t, 7, i)
@@ -204,10 +209,9 @@ func TestRunWithReWrap(t *testing.T) {
 
 	// Test with a logger that implements ReWrapper - wrap the capture logger with ExtraDetailLogger
 	logger := ntest.ExtraDetailLogger(captureLogger, "RWRW-")
-	runT := ntest.AsRunT(logger)
 
 	var subTestRan bool
-	success := ntest.RunWithReWrap(runT, "rewrap-test", func(reWrapped ntest.RunT) {
+	success := ntest.RunWithReWrap(logger, "rewrap-test", func(reWrapped ntest.T) {
 		reWrapped.Log("This should be prefixed and timestamped")
 		reWrapped.Logf("Formatted message: %s", "test")
 		subTestRan = true
@@ -249,4 +253,9 @@ func TestAdjustSkipFramesForwarding(t *testing.T) {
 	} else {
 		t.Error("BufferedLogger should implement AdjustSkipFrames")
 	}
+}
+
+type runner interface {
+	ntest.T
+	Run(string, func(*testing.T)) bool
 }

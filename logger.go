@@ -55,11 +55,11 @@ func (t replaceLoggerT[ET]) Logf(format string, args ...interface{}) {
 	t.logger(message)
 }
 
-// Run implements the new RunT interface
+// Run implements the new runner interface
 // Note: This passes the raw *testing.T to the function, losing logger wrapping.
 // Use RunWithReWrap instead if you need to preserve logger wrapping in subtests.
 func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.T).(RunT); ok {
+	if runnable, ok := any(t.T).(runner); ok {
 		return runnable.Run(name, f)
 	}
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
@@ -81,7 +81,7 @@ func (t replaceLoggerT[ET]) ReWrap(newT T) T {
 // AdjustSkipFrames forwards to the underlying logger if it supports it. This
 // is a delta not an absolute.
 func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
@@ -101,7 +101,7 @@ func (t loggerT[ET]) ReWrap(newT T) T {
 func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames += skip
 	// Also forward to the underlying T if it supports AdjustSkipFrames
-	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
@@ -192,8 +192,6 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 //
 // If the environment variable NTEST_BUFFERING is set to "false", buffering
 // will be turned off and the original T will be returned directly.
-//
-// Use AsRunT to upgrade the T into a RunT if using it with matrix tests.
 func BufferedLogger[ET T](t ET) T {
 	if os.Getenv("NTEST_BUFFERING") == "false" {
 		// When buffering is disabled, return the original T directly to avoid any intermediate calls

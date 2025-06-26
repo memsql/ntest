@@ -75,15 +75,6 @@ func TestBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	testLineNumberAccuracy(t, buffered, mockT, true, true) // expect buffering, test should fail to check line numbers
 }
 
-func TestBufferedLogger_LineNumberAccuracy_AsRunT(t *testing.T) {
-	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
-		t.Setenv("NTEST_BUFFERING", "true")
-	}
-	mockT := newMockedT(t)
-	buffered := ntest.BufferedLogger(mockT)
-	testLineNumberAccuracy(t, ntest.AsRunT(buffered), mockT, true, true) // expect buffering, test should fail to check line numbers
-}
-
 func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
 		t.Setenv("NTEST_BUFFERING", "true")
@@ -92,16 +83,6 @@ func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	buffered := ntest.BufferedLogger(mockT)
 	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
 	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "PREFIX") // expect buffering, test should fail to check line numbers
-}
-
-func TestExtraDetailLogger_WithBufferedLogger_LineNumberAccuracy_AsRunT(t *testing.T) {
-	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
-		t.Setenv("NTEST_BUFFERING", "true")
-	}
-	mockT := newMockedT(t)
-	buffered := ntest.BufferedLogger(mockT)
-	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX")
-	testLineNumberAccuracy(t, ntest.AsRunT(extraDetail), mockT, true, true, "PREFIX") // expect buffering, test should fail to check line numbers
 }
 
 func TestExtraDetailLogger_Doubled_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
@@ -113,17 +94,6 @@ func TestExtraDetailLogger_Doubled_WithBufferedLogger_LineNumberAccuracy(t *test
 	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX1")
 	extraDetail2 := ntest.ExtraDetailLogger(extraDetail, "PREFIX2")
 	testLineNumberAccuracy(t, extraDetail2, mockT, true, true, "PREFIX2", "PREFIX1") // expect buffering, test should fail to check line numbers
-}
-
-func TestExtraDetailLogger_Doubled_WithBufferedLogger_LineNumberAccuracy_AsRunT(t *testing.T) {
-	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
-		t.Setenv("NTEST_BUFFERING", "true")
-	}
-	mockT := newMockedT(t)
-	buffered := ntest.BufferedLogger(mockT)
-	extraDetail := ntest.ExtraDetailLogger(buffered, "PREFIX1")
-	extraDetail2 := ntest.ExtraDetailLogger(extraDetail, "PREFIX2")
-	testLineNumberAccuracy(t, ntest.AsRunT(extraDetail2), mockT, true, true, "PREFIX2", "PREFIX1") // expect buffering, test should fail to check line numbers
 }
 
 func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
@@ -170,25 +140,13 @@ func TestExtraDetailInsideRun(t *testing.T) {
 		buffered.Log(s + " SUFFIX")
 	})
 	var ran bool
-	success := ntest.RunWithReWrap(ntest.AsRunT(extraDetail), "inner", func(wrapped ntest.RunT) {
+	success := ntest.RunWithReWrap(extraDetail, "inner", func(wrapped ntest.T) {
 		inner := mockT.getInner(wrapped.Name())
 		testLineNumberAccuracy(inner.real, wrapped, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 		ran = true
 	})
 	require.True(t, success)
 	require.True(t, ran)
-}
-
-func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy_AsRunT(t *testing.T) {
-	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
-		t.Setenv("NTEST_BUFFERING", "true")
-	}
-	mockT := newMockedT(t)
-	buffered := ntest.BufferedLogger(mockT)
-	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
-		buffered.Log(s + " SUFFIX")
-	})
-	testLineNumberAccuracy(t, ntest.AsRunT(extraDetail), mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 }
 
 func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *testing.T) {
@@ -198,15 +156,6 @@ func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy(t *
 	mockT := newMockedT(t)
 	buffered := ntest.BufferedLogger(mockT)
 	testLineNumberAccuracy(t, buffered, mockT, false, false) // no buffering, test passes (logs appear immediately)
-}
-
-func TestExtraDetailLogger_WithBufferedLogger_NoBuffering_LineNumberAccuracy_AsRunT(t *testing.T) {
-	// Set environment variable to disable buffering
-	t.Setenv("NTEST_BUFFERING", "false")
-
-	mockT := newMockedT(t)
-	buffered := ntest.BufferedLogger(mockT)
-	testLineNumberAccuracy(t, ntest.AsRunT(buffered), mockT, false, false) // no buffering, test passes (logs appear immediately)
 }
 
 // Generic line number accuracy test that works with different logger configurations
