@@ -21,9 +21,10 @@ type replaceLoggerT[ET T] struct {
 	logger func(string)
 }
 
-// ReplaceLogger creates a logger wrapper that overrides the logging function. When layered
-// on top of BufferedLogger, it assumes that only one extra stack frame is added. If that's
-// not the case, cast and adjust:
+// ReplaceLogger creates a wrapped T that overrides the logging function. When layered
+// on top of BufferedLogger (which cares about stack frames), it assumes that one extra
+// extra stack frame is added by the logger function.
+// If that's not the case, cast and adjust:
 //
 //	if asf, ok := t.(interface{ AdjustSkipFrames(int) }); ok {
 //		asf.AdjustSkipFrames(2)
@@ -109,8 +110,7 @@ func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 // the prefix is also added.
 func ExtraDetailLogger[ET T](t ET, prefix string) T {
 	return ReplaceLogger(t, func(s string) {
-		prefixedMessage := fmt.Sprintf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
-		t.Log(prefixedMessage)
+		t.Logf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
 	})
 }
 

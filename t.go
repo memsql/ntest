@@ -3,9 +3,8 @@ package ntest
 import "testing"
 
 // T is subset of what testing.T provides and is also a subset of
-// of what ginkgo.GinkgoT() provides.  This interface is probably
-// richer than strictly required so more could be removed from it
-// (or more added).
+// of what ginkgo.GinkgoT() provides. Compared to *testing.T,
+// main thing it is missing is Run()
 type T interface {
 	Cleanup(func())
 	Setenv(key, value string)
@@ -26,8 +25,7 @@ type T interface {
 	Skipped() bool
 }
 
-// RunT brings in more of the *testing.T API including Run and Parallel which are needed
-// for matrix tests.
+// RunT adds Run() to T.
 // *testing.T satisfies the RunT interface.
 type RunT interface {
 	T
@@ -35,7 +33,8 @@ type RunT interface {
 }
 
 // NewTestRunner creates a test runner that works with matrix testing by
-// upgrading a T to a RunT.
+// upgrading a T to a RunT. It checks to see if the T is actually a RunT,
+// like *testing.T.
 // This is useful for converting T types to work with matrix testing functions.
 // If the concrete type underlying T doesn't implement Run then the
 // test will fail if Run is called.
@@ -66,7 +65,7 @@ func (s simpleRunT) Run(name string, f func(*testing.T)) bool {
 // RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.
 // This should be used instead of calling t.Run in tests that use
 // ReplaceLogger, BufferedLogger, or ExtraDetailLogger. If running a test with a
-// wrapped logger that supports ReWrap, use RunWithReWrap.
+// wrapped logger that supports ReWrap, use RunWithReWrap instead of .Run().
 func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 	return t.Run(name, func(subT *testing.T) {
 		var reWrapped RunT
@@ -80,7 +79,8 @@ func RunWithReWrap(t RunT, name string, f func(RunT)) bool {
 }
 
 // ReWrapper allows types that wrap T to recreate themselves from fresh T
-// This enables proper sub-test handling in matrix testing while preserving wrapper behavior
+// This, combined with RunWithReWrap, allows proper subtest handling in tests
+// that wrap T.
 type ReWrapper interface {
 	ReWrap(T) T
 }
