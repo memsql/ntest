@@ -55,7 +55,7 @@ func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 // Note: This passes the raw *testing.T to the function, losing logger wrapping.
 // Use RunWithReWrap instead if you need to preserve logger wrapping in subtests.
 func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.T).(interface {
+	if runnable, ok := t.T.(interface {
 		Run(string, func(*testing.T)) bool
 	}); ok {
 		return runnable.Run(name, f)
@@ -69,7 +69,7 @@ func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
 
 // ReWrap implements ReWrapper to recreate loggerT with fresh T
 func (t loggerT[ET]) ReWrap(newT T) T {
-	if reWrapper, ok := any(t.T).(ReWrapper); ok {
+	if reWrapper, ok := t.T.(ReWrapper); ok {
 		rewrapped := reWrapper.ReWrap(newT)
 		return ReplaceLogger(rewrapped, t.logger)
 	}
@@ -80,7 +80,7 @@ func (t loggerT[ET]) ReWrap(newT T) T {
 func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames += skip
 	// Also forward to the underlying T if it supports AdjustSkipFrames
-	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
