@@ -22,12 +22,12 @@ type replaceLoggerT[ET T] struct {
 }
 
 // ReplaceLogger creates a wrapped T that overrides the logging function. When layered
-// on top of BufferedLogger (which cares about stack frames), it assumes that one extra
-// extra stack frame is added by the logger function.
-// If that's not the case, cast and adjust:
+// on top of BufferedLogger (which cares about stack frames), it automatically adjusts
+// for the extra stack frames: replaceLoggerT.Log -> user logger function -> underlying logger.
+// If the user logger function adds additional frames beyond the expected one, cast and adjust:
 //
 //	if asf, ok := t.(interface{ AdjustSkipFrames(int) }); ok {
-//		asf.AdjustSkipFrames(2)
+//		asf.AdjustSkipFrames(1) // +1 more beyond the default adjustment
 //	}
 //
 // This adjustment should be done before using the the returned T
