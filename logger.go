@@ -11,55 +11,53 @@ import (
 )
 
 type loggerT[ET T] struct {
-	replaceLoggerT[ET]     // Embed replaceLoggerT for basic functionality
-	skipFrames         int // Additional skip frames for nested wrappers
-}
-
-// replaceLoggerT directly implements T interface to avoid double loggerT wrapping
-type replaceLoggerT[ET T] struct {
 	T
-	logger func(string)
+	logger     func(string)
+	skipFrames int // Additional skip frames for nested wrappers
 }
 
 // ReplaceLogger creates a wrapped T that overrides the logging function. When layered
-// on top of BufferedLogger (which cares about stack frames), it automatically adjusts
-// for the extra stack frames: replaceLoggerT.Log -> user logger function -> underlying logger.
-// If the user logger function adds additional frames beyond the expected one, cast and adjust:
+// on top of BufferedLogger (which cares about stack frames), it assumes that one extra
+// extra stack frame is added by the logger function.
+// If that's not the case, cast and adjust:
 //
 //	if asf, ok := t.(interface{ AdjustSkipFrames(int) }); ok {
-//		asf.AdjustSkipFrames(1) // +1 more beyond the default adjustment
+//		asf.AdjustSkipFrames(2)
 //	}
 //
 // This adjustment should be done before using the the returned T
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
-	// the extra call frames: replaceLoggerT.Log -> custom logger function -> underlying logger call
+	// the extra call frames: loggerT.Log -> custom logger function -> underlying logger call
 	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(2) // +2 for replaceLoggerT.Log and the custom logger function
+		adjuster.AdjustSkipFrames(2) // +2 for loggerT.Log and the custom logger function
 	}
 
-	return &replaceLoggerT[ET]{
-		T:      t,
-		logger: logger,
+	return &loggerT[ET]{
+		T:          t,
+		logger:     logger,
+		skipFrames: 0,
 	}
 }
 
-func (t replaceLoggerT[ET]) Log(args ...interface{}) {
+func (t loggerT[ET]) Log(args ...interface{}) {
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
 	t.logger(message)
 }
 
-func (t replaceLoggerT[ET]) Logf(format string, args ...interface{}) {
+func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 	message := fmt.Sprintf(format, args...)
 	t.logger(message)
 }
 
-// Run implements the new runner interface
+// Run implements the runner interface
 // Note: This passes the raw *testing.T to the function, losing logger wrapping.
 // Use RunWithReWrap instead if you need to preserve logger wrapping in subtests.
-func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := any(t.T).(runner); ok {
+func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
+	if runnable, ok := any(t.T).(interface {
+		Run(string, func(*testing.T)) bool
+	}); ok {
 		return runnable.Run(name, f)
 	}
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
@@ -69,8 +67,8 @@ func (t replaceLoggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	return false
 }
 
-// ReWrap implements ReWrapper to recreate replaceLoggerT with fresh T
-func (t replaceLoggerT[ET]) ReWrap(newT T) T {
+// ReWrap implements ReWrapper to recreate loggerT with fresh T
+func (t loggerT[ET]) ReWrap(newT T) T {
 	if reWrapper, ok := any(t.T).(ReWrapper); ok {
 		rewrapped := reWrapper.ReWrap(newT)
 		return ReplaceLogger(rewrapped, t.logger)
@@ -78,30 +76,11 @@ func (t replaceLoggerT[ET]) ReWrap(newT T) T {
 	return ReplaceLogger(newT, t.logger)
 }
 
-// AdjustSkipFrames forwards to the underlying logger if it supports it. This
-// is a delta not an absolute.
-func (t *replaceLoggerT[ET]) AdjustSkipFrames(skip int) {
-	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip)
-	}
-}
-
-// ReWrap implements ReWrapper to recreate loggerT with fresh T
-func (t loggerT[ET]) ReWrap(newT T) T {
-	// Delegate to the embedded replaceLoggerT's ReWrap to handle chaining properly
-	reWrappedBase := t.replaceLoggerT.ReWrap(newT)
-
-	// Since loggerT is essentially a BufferedLogger wrapping a ReplaceLogger,
-	// we need to recreate this structure. The embedded replaceLoggerT already
-	// handled the ReWrap chaining, so we just need to wrap it in buffering again.
-	return BufferedLogger(reWrappedBase)
-}
-
-// AdjustSkipFrames adjusts skip frames on this loggerT instance
+// AdjustSkipFrames adjusts skip frames on this loggerT instance and forwards to the underlying T if it supports it
 func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
 	t.skipFrames += skip
 	// Also forward to the underlying T if it supports AdjustSkipFrames
-	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
+	if adjuster, ok := any(t.T).(interface{ AdjustSkipFrames(int) }); ok {
 		adjuster.AdjustSkipFrames(skip)
 	}
 }
@@ -199,9 +178,7 @@ func BufferedLogger[ET T](t ET) T {
 	}
 
 	wrapped := &loggerT[ET]{
-		replaceLoggerT: replaceLoggerT[ET]{
-			T: t, // Direct embedding of T interface
-		},
+		T:          t, // Direct embedding of T interface
 		skipFrames: 0, // Initialize skip frames, will be adjusted by AdjustSkipFrames
 	}
 
