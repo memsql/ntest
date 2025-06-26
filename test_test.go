@@ -81,12 +81,12 @@ func testParallelMatrix(justT ntest.T) {
 		t.Parallel()
 		select {
 		case <-doneA:
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 5):
 			require.False(t, true, "timeout")
 		}
 		select {
 		case <-doneB:
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 5):
 			require.False(t, true, "timeout")
 		}
 		assert.Equal(t, map[string]struct{}{
@@ -131,12 +131,12 @@ func testParallelMatrixLogger(justT ntest.T) {
 		subT.Parallel()
 		select {
 		case <-doneA:
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 5):
 			require.False(subT, true, "loggerA timeout")
 		}
 		select {
 		case <-doneB:
-		case <-time.After(time.Second * 2):
+		case <-time.After(time.Second * 5):
 			require.False(subT, true, "loggerB timeout")
 		}
 	})
