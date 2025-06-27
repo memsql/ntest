@@ -20,6 +20,7 @@ test-unit:
 	go test
 	go test -cover
 	go test -bench .
+	go test -race
 
 test: test-unit test-integration
 

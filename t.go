@@ -48,24 +48,41 @@ type parallel interface {
 	Parallel()
 }
 
+// callParallel is a helper that attempts to call .Parallel() on the underlying T.
+// It returns true if .Parallel() was successfully called, false otherwise.
+func callParallel(t T) bool {
+	t.Helper()
+	// Walk down the wrapper chain to find something that supports Parallel
+	current := t
+	for {
+		switch tt := current.(type) {
+		case parallel:
+			tt.Parallel()
+			return true
+		case ReWrapper:
+			current = tt.Unwrap()
+			continue
+		}
+		return false
+	}
+}
+
 // Parallel calls .Parallel() on the underlying T if it supports .Parallel.
 // If not, it logs a warning and continues without Parallel.
+// If the input T is a ReWrapper then it will be unwrapped to find a T that supports Parallel.
 func Parallel(t T) {
 	t.Helper()
-	p, ok := t.(parallel)
-	if ok {
-		p.Parallel()
-	} else {
+	if !callParallel(t) {
 		t.Logf("Ignoring .Parallel() call on %T", t)
 	}
 }
 
 // MustParallel calls .Parallel() on the underlying T if it supports .Parallel.
-// If not, it fails the test
+// If not, it fails the test.
+// If the input T is a ReWrapper then it will be unwrapped to find a T that supports Parallel.
 func MustParallel(t T) {
-	if p, ok := t.(parallel); ok {
-		p.Parallel()
-	} else {
+	t.Helper()
+	if !callParallel(t) {
 		t.Logf("Parallel() not supported by %T", t)
 		t.Fail()
 	}
@@ -73,7 +90,8 @@ func MustParallel(t T) {
 
 // Run is a helper that runs a subtest and automatically handles ReWrap logic.
 // This should be used instead of calling t.Run directly when using logger wrappers like
-// ReplaceLogger, BufferedLogger, or ExtraDetailLogger.
+// ReplaceLogger, BufferedLogger, or ExtraDetailLogger that support the
+// ReWrapper interface.
 //
 // Key benefits:
 // - Works with both *testing.T and *testing.B (they have different Run signatures)
@@ -111,7 +129,7 @@ func Run(t T, name string, f func(T)) bool {
 				inner(subT)
 			})
 		case ReWrapper:
-			current = tt.Underlying()
+			current = tt.Unwrap()
 			continue
 		default:
 			t.Logf("Run not supported by %T", t)
@@ -122,11 +140,14 @@ func Run(t T, name string, f func(T)) bool {
 }
 
 // ReWrapper allows types that wrap T to recreate themselves from fresh T
-// This, combined with RunWithReWrap, allows proper subtest handling in tests
+// This, combined with Run() and Parallel(), allows proper subtest handling in tests
 // that wrap T.
 type ReWrapper interface {
+	T
 	// ReWrap must return a T that is wrapped (with the current class) compared to it's input
+	// This is re-applying the wrapping to get back to the type of the ReWrapper
 	ReWrap(T) T
-	// Underlying must return a T that is unwrapped compared to the ReWrapper
-	Underlying() T
+	// Unwrap must return a T that is unwrapped compared to the ReWrapper.
+	// This is providing access to the inner-T
+	Unwrap() T
 }
