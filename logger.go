@@ -72,6 +72,7 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 }
 
 func (t loggerT[ET]) Log(args ...interface{}) {
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.Helper()
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
@@ -79,6 +80,7 @@ func (t loggerT[ET]) Log(args ...interface{}) {
 }
 
 func (t loggerT[ET]) Logf(format string, args ...interface{}) {
+	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.Helper()
 	message := fmt.Sprintf(format, args...)
 	t.logger(message)
