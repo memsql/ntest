@@ -55,6 +55,15 @@ type bufferedLoggerT[ET T] struct {
 }
 
 // ReplaceLogger creates a wrapped T that overrides the logging function.
+// For accurate line number reporting in log output, call t.Helper() at the
+// beginning of your logger function to mark it as a helper function.
+//
+// Example:
+//
+//	logger := ntest.ReplaceLogger(t, func(s string) {
+//	    t.Helper() // Mark this function as a helper for accurate line numbers
+//	    t.Log("PREFIX: " + s)
+//	})
 func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	return &loggerT[ET]{
 		T:      t,
