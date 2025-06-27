@@ -109,6 +109,19 @@ func TestReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.T) {
 	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 }
 
+func BenchmarkReplaceLogger_WithBufferedLogger_LineNumberAccuracy(t *testing.B) {
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	mockT := newMockedT(t)
+	buffered := ntest.BufferedLogger(mockT)
+	extraDetail := ntest.ReplaceLogger(buffered, func(s string) {
+		buffered.Helper() // Mark this lambda as a helper
+		buffered.Log(s + " SUFFIX")
+	})
+	testLineNumberAccuracy(t, extraDetail, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+}
+
 func TestReplaceLogger_WithBufferedLogger_Helper_LineNumberAccuracy(t *testing.T) {
 	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
 		t.Setenv("NTEST_BUFFERING", "true")
@@ -323,6 +336,11 @@ func (m *mockedT) ReWrap(t ntest.T) ntest.T {
 	return n
 }
 
+// Unwrap returns the underlying real T, allowing mockedT to work with ntest.Run()
+func (m *mockedT) Unwrap() ntest.T {
+	return m.real
+}
+
 func (m *mockedT) Failed() bool {
 	return m.failed
 }
@@ -412,39 +430,4 @@ func (m *mockedT) Parallel() {
 
 func (m *mockedT) setFailed() {
 	m.failed = true
-}
-
-// Run implements RunT interface for mockedT
-func (m *mockedT) Run(name string, f func(*testing.T)) bool {
-	// For the mock, we need to create a sub-test name
-	subTestName := m.name + "/" + name
-	subMock := newMockedT(m.real)
-	subMock.name = subTestName
-
-	// Store the sub-mock in the inner map so getInner can find it
-	m.lock.Lock()
-	m.inner[subTestName] = subMock
-	m.lock.Unlock()
-
-	// We can't actually call f() with a *testing.T since mockedT isn't a real *testing.T
-	// For testing purposes, we'll just assume the function would succeed
-	// and return true. In a real implementation, this would delegate to the underlying
-	// real T's Run method.
-	if realRunner, ok := m.real.(interface {
-		Run(string, func(*testing.T)) bool
-	}); ok {
-		// If the real T supports Run, use it but with a different function that
-		// tracks our mock state
-		return realRunner.Run(name, func(subT *testing.T) {
-			// Update our sub-mock's real reference
-			subMock.real = subT
-			// Now call the original function
-			f(subT)
-		})
-	}
-
-	// If real T doesn't support Run, just mark as failed like other implementations
-	m.Logf("Run not supported by %T", m.real)
-	m.Fail()
-	return false
 }
