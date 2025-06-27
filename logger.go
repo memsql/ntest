@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 )
 
@@ -52,22 +51,6 @@ func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 	t.logger(message)
 }
 
-// Run implements the runner interface
-// Note: This passes the raw *testing.T to the function, losing logger wrapping.
-// Use RunWithReWrap instead if you need to preserve logger wrapping in subtests.
-func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
-	if runnable, ok := t.T.(interface {
-		Run(string, func(*testing.T)) bool
-	}); ok {
-		return runnable.Run(name, f)
-	}
-	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	t.T.Logf("Run not supported by %T", t.T)
-	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
-	t.T.Fail()
-	return false
-}
-
 func (t loggerT[ET]) Parallel() {
 	Parallel(t.T)
 }
@@ -79,6 +62,11 @@ func (t loggerT[ET]) ReWrap(newT T) T {
 		return ReplaceLogger(rewrapped, t.logger)
 	}
 	return ReplaceLogger(newT, t.logger)
+}
+
+// Underlying implements ReWrapper to return the wrapped T
+func (t loggerT[ET]) Underlying() T {
+	return t.T
 }
 
 // ExtraDetailLogger creates a logger wrapper that adds both a
