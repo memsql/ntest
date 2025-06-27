@@ -2,16 +2,18 @@ package ntest
 
 import "testing"
 
-// T is subset of what testing.T provides and is also a subset of
-// of what ginkgo.GinkgoT() provides. Compared to *testing.T,
-// main thing it is missing is Run()
+// T is subset of what *testing.T provides.
+//
+// It is missing:
+//
+//	.Run - not present in ginkgo.GinkgoT()
+//	.Parallel - not present in *testing.B
 type T interface {
 	Cleanup(func())
 	Setenv(key, value string)
 	Error(args ...interface{})
 	Errorf(format string, args ...interface{})
 	Fail()
-	Parallel()
 	FailNow()
 	Failed() bool
 	Fatal(args ...interface{})
@@ -25,9 +27,30 @@ type T interface {
 	Skipped() bool
 }
 
+var (
+	_ T = (*testing.B)(nil)
+	_ T = (*testing.T)(nil)
+)
+
 type runner interface {
 	T
 	Run(string, func(*testing.T)) bool
+}
+
+type parallel interface {
+	T
+	Parallel()
+}
+
+// Parallel calls .Parallel() on the underlying T if it supports .Parallel.
+// If not, it logs a warning and continues without Parallel.
+func Parallel(t T) {
+	p, ok := t.(parallel)
+	if ok {
+		p.Parallel()
+	} else {
+		t.Logf("Ignoring .Parallel() call on %T", t)
+	}
 }
 
 // RunWithReWrap is a helper that runs a subtest and automatically handles ReWrap logic.

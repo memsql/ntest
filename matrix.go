@@ -25,7 +25,6 @@ import (
 //
 // The provided T must support Run()
 func RunParallelMatrix(t T, chain ...any) {
-	t.Parallel()
 	runMatrixTest(t, true, chain)
 }
 
@@ -65,7 +64,7 @@ func runMatrixTest(t T, parallel bool, chain []any) {
 			subChain := subChain
 			RunWithReWrap(t, name, func(reWrapped T) {
 				if parallel {
-					reWrapped.Parallel()
+					Parallel(reWrapped)
 				}
 				testingT := func(tInner T) []any {
 					if tt, ok := tInner.(*testing.T); ok {
