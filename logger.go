@@ -78,13 +78,15 @@ func ExtraDetailLogger[ET T](t ET, prefix string) T {
 
 // helperTracker keeps track of functions marked as helpers
 type helperTracker struct {
-	helpers map[string]bool
+	helpers map[string]struct{}
+	seen    map[uintptr]struct{}
 	mu      sync.RWMutex
 }
 
 func newHelperTracker() *helperTracker {
 	return &helperTracker{
-		helpers: make(map[string]bool),
+		helpers: make(map[string]struct{}),
+		seen:    make(map[uintptr]struct{}),
 	}
 }
 
@@ -95,10 +97,14 @@ func (ht *helperTracker) markHelper() {
 	// Get the caller's function name (the function that called Helper())
 	pc, _, _, ok := runtime.Caller(2) // Skip markHelper, Helper method
 	if ok {
+		if _, ok := ht.seen[pc]; ok {
+			return
+		}
+		ht.seen[pc] = struct{}{}
 		frames := runtime.CallersFrames([]uintptr{pc})
 		frame, _ := frames.Next()
 		if frame.Function != "" {
-			ht.helpers[frame.Function] = true
+			ht.helpers[frame.Function] = struct{}{}
 		}
 	}
 }
@@ -106,7 +112,8 @@ func (ht *helperTracker) markHelper() {
 func (ht *helperTracker) isHelper(funcName string) bool {
 	ht.mu.RLock()
 	defer ht.mu.RUnlock()
-	return ht.helpers[funcName]
+	_, ok := ht.helpers[funcName]
+	return ok
 }
 
 // bufferedLoggerT extends loggerT with helper tracking for buffered logging
