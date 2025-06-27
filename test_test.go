@@ -235,8 +235,3 @@ func TestRunWrapper(t *testing.T) {
 	assert.Contains(t, capturedLogs[1], "Formatted message: test", "Second message should contain formatted text")
 	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[1], "Second message should have timestamp")
 }
-
-type runner interface {
-	ntest.T
-	Run(string, func(*testing.T)) bool
-}

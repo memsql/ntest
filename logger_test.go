@@ -3,6 +3,7 @@ package ntest_test
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -378,9 +379,7 @@ func (m *mockedT) Skipf(format string, args ...interface{}) {
 
 func (m *mockedT) log(s string) {
 	_, file, line, _ := runtime.Caller(2)
-	if idx := strings.LastIndex(file, "/"); idx >= 0 {
-		file = file[idx+1:]
-	}
+	file = filepath.Base(file)
 	m.captured = append(m.captured, fmt.Sprintf("%s:%d %s", file, line, s))
 }
 

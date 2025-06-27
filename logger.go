@@ -3,6 +3,7 @@ package ntest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -170,9 +171,7 @@ func createBufferedLoggerWithHelperTracking[ET T](t ET, helperTracker *helperTra
 				file = frame.File
 				line = frame.Line
 				// Get just the filename, not the full path
-				if idx := strings.LastIndex(file, "/"); idx >= 0 {
-					file = file[idx+1:]
-				}
+				file = filepath.Base(file)
 				break
 			}
 
