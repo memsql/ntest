@@ -10,43 +10,67 @@ import (
 	"time"
 )
 
-type loggerT[ET T] struct {
-	T
-	logger     func(string)
-	skipFrames int // Additional skip frames for nested wrappers
+// helperTracker keeps track of functions marked as helpers
+type helperTracker struct {
+	helpers map[string]bool
+	mu      sync.RWMutex
 }
 
-// ReplaceLogger creates a wrapped T that overrides the logging function. When layered
-// on top of BufferedLogger (which cares about stack frames), it assumes that one extra
-// extra stack frame is added by the logger function.
-// If that's not the case, cast and adjust:
-//
-//	if asf, ok := t.(interface{ AdjustSkipFrames(int) }); ok {
-//		asf.AdjustSkipFrames(2)
-//	}
-//
-// This adjustment should be done before using the the returned T
-func ReplaceLogger[ET T](t ET, logger func(string)) T {
-	// If the underlying logger supports AdjustSkipFrames, adjust it to account for
-	// the extra call frames: loggerT.Log -> custom logger function -> underlying logger call
-	if adjuster, ok := any(t).(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(2) // +2 for loggerT.Log and the custom logger function
+func newHelperTracker() *helperTracker {
+	return &helperTracker{
+		helpers: make(map[string]bool),
 	}
+}
 
+func (ht *helperTracker) markHelper() {
+	ht.mu.Lock()
+	defer ht.mu.Unlock()
+
+	// Get the caller's function name (the function that called Helper())
+	pc, _, _, ok := runtime.Caller(2) // Skip markHelper, Helper method
+	if ok {
+		frames := runtime.CallersFrames([]uintptr{pc})
+		frame, _ := frames.Next()
+		if frame.Function != "" {
+			ht.helpers[frame.Function] = true
+		}
+	}
+}
+
+func (ht *helperTracker) isHelper(funcName string) bool {
+	ht.mu.RLock()
+	defer ht.mu.RUnlock()
+	return ht.helpers[funcName]
+}
+
+type loggerT[ET T] struct {
+	T
+	logger func(string)
+}
+
+// bufferedLoggerT extends loggerT with helper tracking for buffered logging
+type bufferedLoggerT[ET T] struct {
+	loggerT[ET]
+	helperTracker *helperTracker
+}
+
+// ReplaceLogger creates a wrapped T that overrides the logging function.
+func ReplaceLogger[ET T](t ET, logger func(string)) T {
 	return &loggerT[ET]{
-		T:          t,
-		logger:     logger,
-		skipFrames: 0,
+		T:      t,
+		logger: logger,
 	}
 }
 
 func (t loggerT[ET]) Log(args ...interface{}) {
+	t.T.Helper()
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
 	t.logger(message)
 }
 
 func (t loggerT[ET]) Logf(format string, args ...interface{}) {
+	t.T.Helper()
 	message := fmt.Sprintf(format, args...)
 	t.logger(message)
 }
@@ -80,20 +104,12 @@ func (t loggerT[ET]) ReWrap(newT T) T {
 	return ReplaceLogger(newT, t.logger)
 }
 
-// AdjustSkipFrames adjusts skip frames on this loggerT instance and forwards to the underlying T if it supports it
-func (t *loggerT[ET]) AdjustSkipFrames(skip int) {
-	t.skipFrames += skip
-	// Also forward to the underlying T if it supports AdjustSkipFrames
-	if adjuster, ok := t.T.(interface{ AdjustSkipFrames(int) }); ok {
-		adjuster.AdjustSkipFrames(skip)
-	}
-}
-
 // ExtraDetailLogger creates a logger wrapper that adds both a
 // prefix and a timestamp to each line that is logged. A space after
 // the prefix is also added.
 func ExtraDetailLogger[ET T](t ET, prefix string) T {
 	return ReplaceLogger(t, func(s string) {
+		t.Helper() // Mark this wrapper function as a helper
 		t.Logf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
 	})
 }
@@ -104,9 +120,9 @@ type bufferedLogEntry struct {
 	line    int
 }
 
-// createBufferedLoggerWithDynamicSkip creates a logger function that buffers log entries
-// and outputs them during cleanup if the test fails, using a dynamic skip frames function
-func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) func(string) {
+// createBufferedLoggerWithHelperTracking creates a logger function that buffers log entries
+// and outputs them during cleanup if the test fails, tracking helper functions
+func createBufferedLoggerWithHelperTracking[ET T](t ET, helperTracker *helperTracker) func(string) {
 	entries := make([]bufferedLogEntry, 0)
 	var cleanupCalled bool
 	var lock sync.Mutex
@@ -135,18 +151,35 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 	})
 
 	return func(message string) {
-		// Get caller information
-		// Stack: runtime.Caller <- this lambda <- loggerT.Log/Logf <- user code
-		// We need to skip: this function (1) + loggerT.Log/Logf (1) + any additional frames (skipFramesFunc())
-		skipFrames := skipFramesFunc()
-		_, file, line, ok := runtime.Caller(2 + skipFrames)
-		if !ok {
-			file = "unknown"
-			line = 0
-		} else {
-			// Get just the filename, not the full path
-			if idx := strings.LastIndex(file, "/"); idx >= 0 {
-				file = file[idx+1:]
+		// Get caller information, walking up the stack to find the first non-helper function
+		var file string
+		var line int
+
+		// Get multiple frames at once and walk through them
+		const maxFrames = 32
+		pcs := make([]uintptr, maxFrames)
+		n := runtime.Callers(2, pcs) // Skip this lambda + loggerT.Log/Logf
+		frames := runtime.CallersFrames(pcs[:n])
+
+		for {
+			frame, more := frames.Next()
+
+			// Skip internal logger functions and marked helpers
+			if !helperTracker.isHelper(frame.Function) &&
+				!strings.Contains(frame.Function, "loggerT[") {
+				file = frame.File
+				line = frame.Line
+				// Get just the filename, not the full path
+				if idx := strings.LastIndex(file, "/"); idx >= 0 {
+					file = file[idx+1:]
+				}
+				break
+			}
+
+			if !more {
+				file = "unknown"
+				line = 0
+				break
 			}
 		}
 
@@ -160,6 +193,7 @@ func createBufferedLoggerWithDynamicSkip[ET T](t ET, skipFramesFunc func() int) 
 		defer lock.Unlock()
 
 		if cleanupCalled {
+			t.Helper()
 			t.Logf("[%s:%d] %s", file, line, message)
 		} else {
 			entries = append(entries, entry)
@@ -185,13 +219,23 @@ func BufferedLogger[ET T](t ET) T {
 		return t
 	}
 
-	wrapped := &loggerT[ET]{
-		T:          t, // Direct embedding of T interface
-		skipFrames: 0, // Initialize skip frames, will be adjusted by AdjustSkipFrames
+	wrapped := &bufferedLoggerT[ET]{
+		loggerT: loggerT[ET]{
+			T: t,
+		},
+		helperTracker: newHelperTracker(),
 	}
 
-	// Create the logger function that uses the current skipFrames from wrapped
-	wrapped.logger = createBufferedLoggerWithDynamicSkip(t, func() int { return wrapped.skipFrames })
+	// Create the logger function that uses the helper tracker
+	wrapped.logger = createBufferedLoggerWithHelperTracking(t, wrapped.helperTracker)
 
-	return wrapped // Return by reference so AdjustSkipFrames works
+	return wrapped
+}
+
+// Helper method for bufferedLoggerT that tracks helpers
+func (t bufferedLoggerT[ET]) Helper() {
+	// Mark the caller as a helper in our tracker
+	t.helperTracker.markHelper()
+	// Also call the underlying T's Helper method
+	t.T.Helper()
 }
