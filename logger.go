@@ -10,48 +10,9 @@ import (
 	"time"
 )
 
-// helperTracker keeps track of functions marked as helpers
-type helperTracker struct {
-	helpers map[string]bool
-	mu      sync.RWMutex
-}
-
-func newHelperTracker() *helperTracker {
-	return &helperTracker{
-		helpers: make(map[string]bool),
-	}
-}
-
-func (ht *helperTracker) markHelper() {
-	ht.mu.Lock()
-	defer ht.mu.Unlock()
-
-	// Get the caller's function name (the function that called Helper())
-	pc, _, _, ok := runtime.Caller(2) // Skip markHelper, Helper method
-	if ok {
-		frames := runtime.CallersFrames([]uintptr{pc})
-		frame, _ := frames.Next()
-		if frame.Function != "" {
-			ht.helpers[frame.Function] = true
-		}
-	}
-}
-
-func (ht *helperTracker) isHelper(funcName string) bool {
-	ht.mu.RLock()
-	defer ht.mu.RUnlock()
-	return ht.helpers[funcName]
-}
-
 type loggerT[ET T] struct {
 	T
 	logger func(string)
-}
-
-// bufferedLoggerT extends loggerT with helper tracking for buffered logging
-type bufferedLoggerT[ET T] struct {
-	loggerT[ET]
-	helperTracker *helperTracker
 }
 
 // replaceLogger creates a wrapped loggerT that overrides the logging function.
@@ -128,6 +89,45 @@ func ExtraDetailLogger[ET T](t ET, prefix string) T {
 		t.Helper() // Mark this wrapper function as a helper
 		t.Logf("%s %s %s", prefix, time.Now().Format("15:04:05"), s)
 	})
+}
+
+// helperTracker keeps track of functions marked as helpers
+type helperTracker struct {
+	helpers map[string]bool
+	mu      sync.RWMutex
+}
+
+func newHelperTracker() *helperTracker {
+	return &helperTracker{
+		helpers: make(map[string]bool),
+	}
+}
+
+func (ht *helperTracker) markHelper() {
+	ht.mu.Lock()
+	defer ht.mu.Unlock()
+
+	// Get the caller's function name (the function that called Helper())
+	pc, _, _, ok := runtime.Caller(2) // Skip markHelper, Helper method
+	if ok {
+		frames := runtime.CallersFrames([]uintptr{pc})
+		frame, _ := frames.Next()
+		if frame.Function != "" {
+			ht.helpers[frame.Function] = true
+		}
+	}
+}
+
+func (ht *helperTracker) isHelper(funcName string) bool {
+	ht.mu.RLock()
+	defer ht.mu.RUnlock()
+	return ht.helpers[funcName]
+}
+
+// bufferedLoggerT extends loggerT with helper tracking for buffered logging
+type bufferedLoggerT[ET T] struct {
+	loggerT[ET]
+	helperTracker *helperTracker
 }
 
 type bufferedLogEntry struct {
