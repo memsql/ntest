@@ -51,10 +51,6 @@ func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 	t.logger(message)
 }
 
-func (t loggerT[ET]) Parallel() {
-	Parallel(t.T)
-}
-
 // ReWrap implements ReWrapper to recreate loggerT with fresh T
 func (t loggerT[ET]) ReWrap(newT T) T {
 	if reWrapper, ok := t.T.(ReWrapper); ok {
@@ -64,8 +60,8 @@ func (t loggerT[ET]) ReWrap(newT T) T {
 	return ReplaceLogger(newT, t.logger)
 }
 
-// Underlying implements ReWrapper to return the wrapped T
-func (t loggerT[ET]) Underlying() T {
+// Unwrap implements ReWrapper to return the wrapped T
+func (t loggerT[ET]) Unwrap() T {
 	return t.T
 }
 

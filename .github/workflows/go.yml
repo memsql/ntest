@@ -23,6 +23,4 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
     - name: Test
-      run: go test ./...
-    - name: Benchmark
-      run: go test -bench . ./...
+      run: make test
