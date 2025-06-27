@@ -72,13 +72,21 @@ func MustParallel(t T) {
 }
 
 // Run is a helper that runs a subtest and automatically handles ReWrap logic.
-// This should be used instead of calling t.Run in tests that use
-// ReplaceLogger, BufferedLogger, or ExtraDetailLogger. If running a test with a
-// wrapped T that supports ReWrap, use RunWithReWrap instead of .Run(). It can
-// also be used with Ts that do not support ReWrap.
+// This should be used instead of calling t.Run directly when using logger wrappers like
+// ReplaceLogger, BufferedLogger, or ExtraDetailLogger.
 //
-// Run also works with *testing.B so it works around the problem of the
-// different signatures of *testing.T and *testing.B
+// Key benefits:
+// - Works with both *testing.T and *testing.B (they have different Run signatures)
+// - Automatically rewraps logger wrappers for subtests via ReWrap interface
+// - Can be used with any T, whether wrapped or not
+//
+// Example:
+//
+//	logger := ntest.BufferedLogger(t)
+//	ntest.Run(logger, "subtest", func(subT ntest.T) {
+//	    // subT is automatically a properly wrapped BufferedLogger
+//	    subT.Log("This will be buffered correctly")
+//	})
 func Run(t T, name string, f func(T)) bool {
 	inner := func(subT T) {
 		var reWrapped T

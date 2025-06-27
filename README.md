@@ -99,6 +99,68 @@ var (
 Then in your package build a library of injectors for things that your tests
 might need that are specific to your application.
 
+## Logging utilities
+
+Ntest provides several utilities for controlling test logging behavior:
+
+### ReplaceLogger
+
+`ReplaceLogger` creates a wrapped T that overrides the logging function. This is useful
+for capturing or modifying log output.
+
+**Important**: For accurate line number reporting in log output, always call `t.Helper()` 
+at the beginning of your logger function:
+
+```go
+logger := ntest.ReplaceLogger(t, func(s string) {
+    t.Helper() // Mark this function as a helper for accurate line numbers
+    t.Log("PREFIX: " + s)
+})
+```
+
+### BufferedLogger
+
+`BufferedLogger` creates a logger that buffers log output and only displays it if the test fails.
+This helps keep passing test output clean while still providing debugging information when tests fail.
+
+```go
+buffered := ntest.BufferedLogger(t)
+buffered.Log("This will only appear if the test fails")
+```
+
+### ExtraDetailLogger
+
+`ExtraDetailLogger` creates a logger wrapper that adds a prefix and timestamp to each log line.
+It automatically calls `t.Helper()` for accurate line number reporting.
+
+```go
+detailed := ntest.ExtraDetailLogger(t, "MyTest")
+detailed.Log("message") // Output: "MyTest 15:04:05 message"
+```
+
+These utilities can be combined. For example, you can create a buffered logger with extra detail:
+
+```go
+buffered := ntest.BufferedLogger(t)
+detailed := ntest.ExtraDetailLogger(buffered, "MyTest")
+```
+
+### Run function
+
+The `Run` function provides a convenient way to run subtests that works with both 
+`*testing.T` and `*testing.B`, automatically handling ReWrap logic for logger wrappers:
+
+```go
+success := ntest.Run(t, "subtest", func(subT ntest.T) {
+    subT.Log("This works with both testing.T and testing.B")
+    // subT will automatically be rewrapped if t was a wrapped logger
+})
+```
+
+This is particularly useful when you have wrapped loggers (like `BufferedLogger` or `ExtraDetailLogger`) 
+and want to run subtests while preserving the logger behavior. The `Run` function automatically 
+calls `ReWrap` on logger wrappers to ensure the subtest gets a properly wrapped logger instance.
+
 Use `nject.Sequence` to bundle sets of injectors together.
 
 If you have a "standard" bundle then make new test runner functions

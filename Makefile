@@ -2,7 +2,8 @@
 
 .PHONY: test-integration test-unit all
 
-# Run the integration test and verify line number behavior
+all: test
+
 test-integration:
 	@echo "Running ReplaceLogger integration test..."
 	@go test -v -run TestReplaceLoggerIntegration > integration_output.txt 2>&1 
@@ -15,12 +16,10 @@ test-integration:
 	fi
 	@rm -f integration_output.txt
 
-# Run standard unit tests
 test-unit:
-	@echo "Running unit tests..."
-	@go test -v
+	go test
+	go test -cover
+	go test -bench .
 
-# Run all tests
 test: test-unit test-integration
 
-all: test
