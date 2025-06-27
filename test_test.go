@@ -94,10 +94,7 @@ func testParallelMatrix(t ntest.T) {
 	})
 }
 
-func testParallelMatrixLogger(justT ntest.T) {
-	t, ok := justT.(runner)
-	require.True(justT, ok)
-
+func testParallelMatrixLogger(t ntest.T) {
 	// Test that logger wrappers work with matrix testing (exercises ReWrap functionality)
 	t.Log("Testing logger wrapper functionality")
 	t.Logf("Logger wrapper test for type %T", t)
@@ -125,8 +122,8 @@ func testParallelMatrixLogger(justT ntest.T) {
 	)
 
 	// Wait for both subtests to complete
-	t.Run("validate", func(subT *testing.T) {
-		subT.Parallel()
+	ntest.Run(t, "validate", func(subT ntest.T) {
+		ntest.MustParallel(subT)
 		select {
 		case <-doneA:
 		case <-time.After(time.Second * 5):

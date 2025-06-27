@@ -97,19 +97,27 @@ func Run(t T, name string, f func(T)) bool {
 		}
 		f(reWrapped)
 	}
-	switch tt := t.(type) {
-	case runner:
-		return tt.Run(name, func(subT *testing.T) {
-			inner(subT)
-		})
-	case runnerB:
-		return tt.Run(name, func(subT *testing.B) {
-			inner(subT)
-		})
-	default:
-		t.Logf("Run not supported by %T", t)
-		t.Fail()
-		return false
+
+	// Walk down the wrapper chain to find something that supports Run
+	current := t
+	for {
+		switch tt := current.(type) {
+		case runner:
+			return tt.Run(name, func(subT *testing.T) {
+				inner(subT)
+			})
+		case runnerB:
+			return tt.Run(name, func(subT *testing.B) {
+				inner(subT)
+			})
+		case ReWrapper:
+			current = tt.Underlying()
+			continue
+		default:
+			t.Logf("Run not supported by %T", t)
+			t.Fail()
+			return false
+		}
 	}
 }
 
@@ -117,5 +125,8 @@ func Run(t T, name string, f func(T)) bool {
 // This, combined with RunWithReWrap, allows proper subtest handling in tests
 // that wrap T.
 type ReWrapper interface {
+	// ReWrap must return a T that is wrapped (with the current class) compared to it's input
 	ReWrap(T) T
+	// Underlying must return a T that is unwrapped compared to the ReWrapper
+	Underlying() T
 }
