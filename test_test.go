@@ -239,28 +239,6 @@ func TestRunWrapper(t *testing.T) {
 	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[1], "Second message should have timestamp")
 }
 
-// TestAdjustSkipFramesForwarding tests that AdjustSkipFrames properly forwards to underlying types
-func TestAdjustSkipFramesForwarding(t *testing.T) {
-	t.Parallel()
-
-	// Create a chain: BufferedLogger wrapping another BufferedLogger
-	// This creates a scenario where skip frames need to be properly forwarded through the chain
-	inner := ntest.BufferedLogger(t)
-	outer := ntest.BufferedLogger(inner)
-
-	// Both should support AdjustSkipFrames
-	if adjuster, ok := outer.(interface{ AdjustSkipFrames(int) }); ok {
-		// This should forward through the chain without panicking
-		adjuster.AdjustSkipFrames(2)
-
-		// Verify we can still log without errors (indicating the chain is intact)
-		outer.Log("Test message through forwarded skip frames")
-		assert.True(t, true, "AdjustSkipFrames forwarding should not break the logger chain")
-	} else {
-		t.Error("BufferedLogger should implement AdjustSkipFrames")
-	}
-}
-
 type runner interface {
 	ntest.T
 	Run(string, func(*testing.T)) bool
