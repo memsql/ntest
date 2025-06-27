@@ -10,9 +10,9 @@ import (
 func TestReplaceLoggerIntegration(t *testing.T) {
 	// Use ReplaceLogger directly (no BufferedLogger)
 	logger := ntest.ReplaceLogger(t, func(s string) {
-		t.Helper() 
-		t.Log("PREFIX " + s) 
+		t.Helper()
+		t.Log("PREFIX " + s)
 	})
 
-	logger.Log("test message from user code") 
+	logger.Log("test message from user code")
 }

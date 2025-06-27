@@ -18,6 +18,7 @@ import (
 var _ ntest.T = &testing.T{}
 
 func TestPrefixLogger(t *testing.T) {
+	t.Parallel()
 	t.Log("Testing ExtraDetailLogger with prefix functionality")
 
 	var caught []string
@@ -49,7 +50,9 @@ func TestPrefixLogger(t *testing.T) {
 
 // TestLoggerLogf tests the Logf method on loggerT
 func TestLoggerLogf(t *testing.T) {
-	t.Parallel()
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
 
 	var captured []string
 	captureLogger := ntest.ReplaceLogger(t, func(s string) {
