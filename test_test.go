@@ -12,7 +12,7 @@ import (
 	"github.com/memsql/ntest"
 )
 
-func TestRun(t *testing.T) {
+func TestRunTest(t *testing.T) {
 	t.Parallel()
 	var called bool
 	ntest.RunTest(t,
@@ -46,9 +46,7 @@ func TestParallelMatrixExtraBuffered(t *testing.T) {
 	testParallelMatrix(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-"))
 }
 
-func testParallelMatrix(justT ntest.T) {
-	t, ok := justT.(runner)
-	require.True(justT, ok)
+func testParallelMatrix(t ntest.T) {
 	var mu sync.Mutex
 	name := t.Name()
 	doneA := make(chan struct{})
@@ -77,8 +75,8 @@ func testParallelMatrix(justT ntest.T) {
 			close(c)
 		},
 	)
-	t.Run("validate", func(t *testing.T) {
-		t.Parallel()
+	ntest.Run(t, "validate", func(t ntest.T) {
+		ntest.MustParallel(t)
 		select {
 		case <-doneA:
 		case <-time.After(time.Second * 5):
@@ -143,7 +141,15 @@ func testParallelMatrixLogger(justT ntest.T) {
 }
 
 func TestMatrix(t *testing.T) {
-	t.Parallel()
+	testMatrix(t)
+}
+
+func BenchmarkMatrix(t *testing.B) {
+	testMatrix(t)
+}
+
+func testMatrix[ET ntest.T](t ET) {
+	ntest.Parallel(t)
 	testsRun := make(map[string]struct{})
 	ntest.RunMatrix(t,
 		func() int { return 7 },
@@ -153,15 +159,15 @@ func TestMatrix(t *testing.T) {
 				func(t ntest.T, _ int) string { return t.Name() },
 			),
 		},
-		func(t *testing.T, s string) {
+		func(t ET, s string) {
 			t.Logf("final func for %s", t.Name())
 			t.Logf("s = %s", s)
 			testsRun[s] = struct{}{}
 		},
 	)
 	assert.Equal(t, map[string]struct{}{
-		"TestMatrix/testA": {},
-		"TestMatrix/testB": {},
+		t.Name() + "/testA": {},
+		t.Name() + "/testB": {},
 	}, testsRun)
 }
 
@@ -197,8 +203,8 @@ func TestEmptyMatrix(t *testing.T) {
 	assert.True(t, mk.Failed())
 }
 
-// TestRunWithReWrap tests the RunWithReWrap functionality directly
-func TestRunWithReWrap(t *testing.T) {
+// TestRunWrapper tests the RunWithReWrap functionality directly
+func TestRunWrapper(t *testing.T) {
 	t.Parallel()
 
 	// Capture log output to verify layering is preserved
@@ -211,7 +217,7 @@ func TestRunWithReWrap(t *testing.T) {
 	logger := ntest.ExtraDetailLogger(captureLogger, "RWRW-")
 
 	var subTestRan bool
-	success := ntest.RunWithReWrap(logger, "rewrap-test", func(reWrapped ntest.T) {
+	success := ntest.Run(logger, "rewrap-test", func(reWrapped ntest.T) {
 		reWrapped.Log("This should be prefixed and timestamped")
 		reWrapped.Logf("Formatted message: %s", "test")
 		subTestRan = true

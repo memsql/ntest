@@ -67,6 +67,10 @@ func (t loggerT[ET]) Run(name string, f func(*testing.T)) bool {
 	return false
 }
 
+func (t loggerT[ET]) Parallel() {
+	Parallel(t.T)
+}
+
 // ReWrap implements ReWrapper to recreate loggerT with fresh T
 func (t loggerT[ET]) ReWrap(newT T) T {
 	if reWrapper, ok := t.T.(ReWrapper); ok {

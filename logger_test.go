@@ -140,7 +140,7 @@ func TestExtraDetailInsideRun(t *testing.T) {
 		buffered.Log(s + " SUFFIX")
 	})
 	var ran bool
-	success := ntest.RunWithReWrap(extraDetail, "inner", func(wrapped ntest.T) {
+	success := ntest.Run(extraDetail, "inner", func(wrapped ntest.T) {
 		inner := mockT.getInner(wrapped.Name())
 		testLineNumberAccuracy(inner.real, wrapped, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 		ran = true
