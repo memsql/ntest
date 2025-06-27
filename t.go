@@ -89,15 +89,16 @@ func Run(t T, name string, f func(T)) bool {
 		}
 		f(reWrapped)
 	}
-	if runT, ok := t.(runner); ok {
-		return runT.Run(name, func(subT *testing.T) {
+	switch tt := t.(type) {
+	case runner:
+		return tt.Run(name, func(subT *testing.T) {
 			inner(subT)
 		})
-	} else if runB, ok := t.(runnerB); ok {
-		return runB.Run(name, func(subT *testing.B) {
+	case runnerB:
+		return tt.Run(name, func(subT *testing.B) {
 			inner(subT)
 		})
-	} else {
+	default:
 		t.Logf("Run not supported by %T", t)
 		t.Fail()
 		return false
