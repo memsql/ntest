@@ -25,6 +25,7 @@ import (
 //
 // The provided T must support Run()
 func RunParallelMatrix(t T, chain ...any) {
+	MustParallel(t)
 	runMatrixTest(t, true, chain)
 }
 
