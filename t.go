@@ -124,7 +124,7 @@ func Run(t T, name string, f func(T)) bool {
 			current = tt.Unwrap()
 			oldWrap := reWrap
 			reWrap = func(t T) T {
-				return oldWrap(tt)
+				return oldWrap(tt.ReWrap(t))
 			}
 			continue
 		default:
