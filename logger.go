@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -39,9 +38,6 @@ func ReplaceLogger[ET T](t ET, logger func(string)) T {
 }
 
 func (t loggerT[ET]) Log(args ...interface{}) {
-	// Debug: Show when loggerT.Log calls Helper
-	fmt.Printf("XXXX DEBUG: loggerT.Log calling %T.Helper()\n", t.T)
-	t.T.Logf("DEBUG: loggerT.Log calling %T.Helper()", t.T)
 	//nolint:staticcheck // QF1008: could remove embedded field "T" from selector
 	t.T.Helper()
 	line := fmt.Sprintln(args...)
@@ -132,27 +128,21 @@ func createBufferedLoggerWithHelperTracking[ET T](t ET, bl *bufferedLoggerT[ET])
 		n := runtime.Callers(2, pcs) // Skip this lambda + loggerT.Log/Logf
 		frames := runtime.CallersFrames(pcs[:n])
 
-		bl.T.Logf("DEBUG[%p]: Stack walking started, got %d frames", bl, n)
 		for {
 			frame, more := frames.Next()
 
-			bl.T.Logf("DEBUG[%p]: Stack frame: %s", bl, frame.Function)
 			// Skip internal logger functions and marked helpers
 			if !bl.isHelper(frame.Function) {
-				bl.T.Logf("DEBUG[%p]: Using frame: %s at %s:%d", bl, frame.Function, frame.File, frame.Line)
 				file = frame.File
 				line = frame.Line
 				// Get just the filename, not the full path
 				file = filepath.Base(file)
 				break
-			} else {
-				bl.T.Logf("DEBUG[%p]: Skipping helper: %s at %s:%d", bl, frame.Function, frame.File, frame.Line)
 			}
 
 			if !more {
 				file = "unknown"
 				line = 0
-				bl.T.Logf("DEBUG[%p]: No more frames, using unknown", bl)
 				break
 			}
 		}
@@ -202,8 +192,6 @@ func BufferedLogger[ET T](t ET) T {
 	loggerFunc := createBufferedLoggerWithHelperTracking(t, wrapped)
 	wrapped.loggerFunc = loggerFunc
 
-	t.Logf("DEBUG[%p] created Buffered logger at %s", wrapped, string(debug.Stack()))
-
 	return wrapped
 }
 
@@ -212,7 +200,6 @@ func (bl *bufferedLoggerT[ET]) Log(args ...interface{}) {
 	bl.Helper() // Call our own Helper method to track this as a helper
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
-	bl.T.Logf("DEBUG[%p]: STORING %s", bl, message)
 	bl.loggerFunc(message)
 }
 
@@ -220,37 +207,29 @@ func (bl *bufferedLoggerT[ET]) Log(args ...interface{}) {
 func (bl *bufferedLoggerT[ET]) Logf(format string, args ...interface{}) {
 	bl.Helper() // Call our own Helper method to track this as a helper
 	message := fmt.Sprintf(format, args...)
-	bl.T.Logf("DEBUG[%p]: STORING %s", bl, message)
 	bl.loggerFunc(message)
 }
 
 // Helper method for bufferedLoggerT that tracks helpers
 func (bl *bufferedLoggerT[ET]) Helper() {
 	// Mark the caller of Helper as a helper
-	bl.T.Logf("DEBUG[%p]: Helper called, marking caller", bl)
 	bl.markHelper(0)
 
 	// Walk the full wrapper chain and call FlexHelper on each level with the same frame number
 	current := bl.T
 	skipFrames := 1 // Same skip frames for all levels - they're all one level deeper than the original call
 
-	bl.T.Logf(" DEBUG[%p]: Starting wrapper chain walk with skipFrames=%d", bl, skipFrames)
-	bl.T.Logf(" DEBUG[%p]: Wrapper chain structure: bufferedLoggerT -> %T", bl, current)
-
 	for {
 		if flexHelper, ok := current.(FlexHelper); ok {
-			bl.T.Logf(" DEBUG[%p]: Found FlexHelper, calling with skipFrames=%d", bl, skipFrames)
 			flexHelper.FlexHelper(skipFrames)
 		}
 
 		if reWrapper, ok := current.(ReWrapper); ok {
 			current = reWrapper.Unwrap()
-			bl.T.Logf(" DEBUG[%p]: Found ReWrapper, unwrapping to %T", bl, current)
 			continue
 		}
 
 		// Reached the end of the chain
-		bl.T.Logf("DEBUG[%p]: Reached end of wrapper chain with %T", bl, current)
 		break
 	}
 }
@@ -277,7 +256,7 @@ func (bl *bufferedLoggerT[ET]) markHelper(skipFrames int) {
 	defer bl.mu.Unlock()
 
 	// Get the caller's function name (the function that called Helper())
-	pc, f, l, ok := runtime.Caller(2 + skipFrames) // Skip markHelper, Helper/FlexHelper method, plus additional frames
+	pc, _, _, ok := runtime.Caller(2 + skipFrames) // Skip markHelper, Helper/FlexHelper method, plus additional frames
 	if ok {
 		if _, ok := bl.seen[pc]; ok {
 			return
@@ -287,8 +266,6 @@ func (bl *bufferedLoggerT[ET]) markHelper(skipFrames int) {
 		frame, _ := frames.Next()
 		if frame.Function != "" {
 			bl.helpers[frame.Function] = struct{}{}
-			// Debug logging with instance ID
-			bl.T.Logf("DEBUG[%p]: Marked helper: %s (skipFrames=%d, %s:%d)", bl, frame.Function, skipFrames, f, l)
 		}
 	}
 }
@@ -297,6 +274,5 @@ func (bl *bufferedLoggerT[ET]) isHelper(funcName string) bool {
 	bl.mu.RLock()
 	defer bl.mu.RUnlock()
 	_, ok := bl.helpers[funcName]
-	bl.T.Logf("DEBUG[%p]: Checking helper %s: %t", bl, funcName, ok)
 	return ok
 }
