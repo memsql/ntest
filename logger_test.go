@@ -166,6 +166,7 @@ func TestExtraDetailInsideRun(t *testing.T) {
 			if reWrapper, ok := current.(ntest.ReWrapper); ok {
 				current = reWrapper.Unwrap()
 				t.Logf("[run] which unwraps to a %T", current)
+				continue
 			}
 			break
 		}
