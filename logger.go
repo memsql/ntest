@@ -207,28 +207,33 @@ func (bl *bufferedLoggerT[ET]) Logf(format string, args ...interface{}) {
 func (bl *bufferedLoggerT[ET]) Helper() {
 	// Mark the caller of Helper as a helper
 	bl.markHelper(0)
+	MarkHelpers(bl.T)
+}
 
+// MarkHelpers examines the Unwrap layers for t, calling FlexHelper(2) on all
+// FlexHelper instances it finds. Call MarkHelper from inside your custom
+// Helper implementation. Unfortunately, *testing.T doesn't implement FlexHelper.
+func MarkHelpers(t T) {
 	// Walk the full wrapper chain and call FlexHelper on each level with the same frame number
-	current := bl.T
-	skipFrames := 1 // Same skip frames for all levels - they're all one level deeper than the original call
+	current := t
+	skipFrames := 2 // Same skip frames for all levels
 
 	for {
 		if flexHelper, ok := current.(FlexHelper); ok {
 			flexHelper.FlexHelper(skipFrames)
 		}
-
 		if reWrapper, ok := current.(ReWrapper); ok {
 			current = reWrapper.Unwrap()
 			continue
 		}
-
-		// Reached the end of the chain
-		break
+		return
 	}
 }
 
 // FlexHelper allows types that wrap T to properly propagate helper marking
-// through wrapper chains with correct stack frame skipping
+// through wrapper chains with correct stack frame skipping. In particular,
+// BufferedLogger uses FlexHelper to propagate .Helper() calls to underlying
+// (Unwrap) loggers using MarkHelpers.
 type FlexHelper interface {
 	FlexHelper(skipFrames int)
 }
