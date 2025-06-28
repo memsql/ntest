@@ -75,94 +75,18 @@ func ExtraDetailLogger[ET T](t ET, prefix string) T {
 // bufferedLoggerT wraps T and adds helper tracking for buffered logging
 type bufferedLoggerT[ET T] struct {
 	T
-	helpers    map[string]struct{}
-	seen       map[uintptr]struct{}
-	mu         sync.RWMutex
-	loggerFunc func(string)
+	helpers       map[string]struct{}
+	seen          map[uintptr]struct{}
+	mu            sync.RWMutex
+	entries       []bufferedLogEntry
+	cleanupCalled bool
+	entryLock     sync.Mutex
 }
 
 type bufferedLogEntry struct {
 	message string
 	file    string
 	line    int
-}
-
-// createBufferedLoggerWithHelperTracking creates a logger function that buffers log entries
-// and outputs them during cleanup if the test fails, tracking helper functions
-func createBufferedLoggerWithHelperTracking[ET T](t ET, bl *bufferedLoggerT[ET]) func(string) {
-	entries := make([]bufferedLogEntry, 0)
-	var cleanupCalled bool
-	var lock sync.Mutex
-
-	// Register cleanup function to output buffered logs if test failed
-	t.Cleanup(func() {
-		lock.Lock()
-		defer lock.Unlock()
-		cleanupCalled = true
-		if (t.Failed() || t.Skipped()) && len(entries) > 0 {
-			var buffer strings.Builder
-			var size int
-			for _, entry := range entries {
-				size += 9 + len(entry.file) + len(entry.message)
-			}
-			buffer.Grow(size)
-			_, _ = buffer.Write([]byte("=== Buffered Log Output (test failed) ===\n"))
-			for _, entry := range entries {
-				_, _ = fmt.Fprintf(&buffer, "%s:%d %s\n", entry.file, entry.line, entry.message)
-			}
-			_, _ = buffer.Write([]byte("=== End Buffered Log Output ===\n"))
-			t.Log(buffer.String())
-		} else {
-			t.Logf("dropping %d log entries (test passed)", len(entries))
-		}
-	})
-
-	return func(message string) {
-		// Get caller information, walking up the stack to find the first non-helper function
-		var file string
-		var line int
-
-		// Get multiple frames at once and walk through them
-		const maxFrames = 32
-		pcs := make([]uintptr, maxFrames)
-		n := runtime.Callers(2, pcs) // Skip this lambda + loggerT.Log/Logf
-		frames := runtime.CallersFrames(pcs[:n])
-
-		for {
-			frame, more := frames.Next()
-
-			// Skip internal logger functions and marked helpers
-			if !bl.isHelper(frame.Function) {
-				file = frame.File
-				line = frame.Line
-				// Get just the filename, not the full path
-				file = filepath.Base(file)
-				break
-			}
-
-			if !more {
-				file = "unknown"
-				line = 0
-				break
-			}
-		}
-
-		entry := bufferedLogEntry{
-			message: message,
-			file:    file,
-			line:    line,
-		}
-
-		lock.Lock()
-		defer lock.Unlock()
-
-		if cleanupCalled {
-			t.Helper()
-			t.Logf("[%s:%d] %s", file, line, message)
-		} else {
-			entries = append(entries, entry)
-		}
-	}
 }
 
 // BufferedLogger creates a logger wrapper that buffers all log output and only
@@ -187,12 +111,81 @@ func BufferedLogger[ET T](t ET) T {
 		T:       t,
 		helpers: make(map[string]struct{}),
 		seen:    make(map[uintptr]struct{}),
+		entries: make([]bufferedLogEntry, 0),
 	}
 
-	loggerFunc := createBufferedLoggerWithHelperTracking(t, wrapped)
-	wrapped.loggerFunc = loggerFunc
+	// Register cleanup function to output buffered logs if test failed
+	t.Cleanup(func() {
+		wrapped.entryLock.Lock()
+		defer wrapped.entryLock.Unlock()
+		wrapped.cleanupCalled = true
+		if (t.Failed() || t.Skipped()) && len(wrapped.entries) > 0 {
+			var buffer strings.Builder
+			var size int
+			for _, entry := range wrapped.entries {
+				size += 9 + len(entry.file) + len(entry.message)
+			}
+			buffer.Grow(size)
+			_, _ = buffer.Write([]byte("=== Buffered Log Output (test failed) ===\n"))
+			for _, entry := range wrapped.entries {
+				_, _ = fmt.Fprintf(&buffer, "%s:%d %s\n", entry.file, entry.line, entry.message)
+			}
+			_, _ = buffer.Write([]byte("=== End Buffered Log Output ===\n"))
+			t.Log(buffer.String())
+		} else {
+			t.Logf("dropping %d log entries (test passed)", len(wrapped.entries))
+		}
+	})
 
 	return wrapped
+}
+
+// logMessage handles the actual logging logic for buffered logging
+func (bl *bufferedLoggerT[ET]) logMessage(message string) {
+	// Get caller information, walking up the stack to find the first non-helper function
+	var file string
+	var line int
+
+	// Get multiple frames at once and walk through them
+	const maxFrames = 32
+	pcs := make([]uintptr, maxFrames)
+	n := runtime.Callers(3, pcs) // Skip logMessage + Log/Logf + caller
+	frames := runtime.CallersFrames(pcs[:n])
+
+	for {
+		frame, more := frames.Next()
+
+		// Skip internal logger functions and marked helpers
+		if !bl.isHelper(frame.Function) {
+			file = frame.File
+			line = frame.Line
+			// Get just the filename, not the full path
+			file = filepath.Base(file)
+			break
+		}
+
+		if !more {
+			file = "unknown"
+			line = 0
+			break
+		}
+	}
+
+	entry := bufferedLogEntry{
+		message: message,
+		file:    file,
+		line:    line,
+	}
+
+	bl.entryLock.Lock()
+	defer bl.entryLock.Unlock()
+
+	if bl.cleanupCalled {
+		bl.T.Helper()
+		bl.T.Logf("[%s:%d] %s", file, line, message)
+	} else {
+		bl.entries = append(bl.entries, entry)
+	}
 }
 
 // Log method for bufferedLoggerT that uses the buffered logger function
@@ -200,14 +193,14 @@ func (bl *bufferedLoggerT[ET]) Log(args ...interface{}) {
 	bl.Helper() // Call our own Helper method to track this as a helper
 	line := fmt.Sprintln(args...)
 	message := line[0 : len(line)-1]
-	bl.loggerFunc(message)
+	bl.logMessage(message)
 }
 
 // Logf method for bufferedLoggerT that uses the buffered logger function
 func (bl *bufferedLoggerT[ET]) Logf(format string, args ...interface{}) {
 	bl.Helper() // Call our own Helper method to track this as a helper
 	message := fmt.Sprintf(format, args...)
-	bl.loggerFunc(message)
+	bl.logMessage(message)
 }
 
 // Helper method for bufferedLoggerT that tracks helpers
