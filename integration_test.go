@@ -7,6 +7,7 @@ import (
 )
 
 // TestReplaceLoggerIntegration tests ReplaceLogger behavior in a real go test environment
+// The real part of this test is inside Makefile
 func TestReplaceLoggerIntegration(t *testing.T) {
 	// Use ReplaceLogger directly (no BufferedLogger)
 	logger := ntest.ReplaceLogger(t, func(s string) {
