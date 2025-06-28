@@ -106,15 +106,7 @@ func MustParallel(t T) {
 //	    subT.Log("This will be buffered correctly")
 //	})
 func Run(t T, name string, f func(T)) bool {
-	inner := func(subT T) {
-		var reWrapped T
-		if reWrapper, ok := t.(ReWrapper); ok {
-			reWrapped = reWrapper.ReWrap(subT)
-		} else {
-			reWrapped = subT
-		}
-		f(reWrapped)
-	}
+	reWrap := func(t T) T { return t }
 
 	// Walk down the wrapper chain to find something that supports Run
 	current := t
@@ -122,14 +114,18 @@ func Run(t T, name string, f func(T)) bool {
 		switch tt := current.(type) {
 		case runner:
 			return tt.Run(name, func(subT *testing.T) {
-				inner(subT)
+				f(reWrap(subT))
 			})
 		case runnerB:
 			return tt.Run(name, func(subT *testing.B) {
-				inner(subT)
+				f(reWrap(subT))
 			})
 		case ReWrapper:
 			current = tt.Unwrap()
+			oldWrap := reWrap
+			reWrap = func(t T) T {
+				return oldWrap(tt)
+			}
 			continue
 		default:
 			t.Logf("Run not supported by %T", t)
@@ -145,7 +141,9 @@ func Run(t T, name string, f func(T)) bool {
 type ReWrapper interface {
 	T
 	// ReWrap must return a T that is wrapped (with the current class) compared to it's input
-	// This is re-applying the wrapping to get back to the type of the ReWrapper
+	// This is re-applying the wrapping to get back to the type of the ReWrapper.
+	// ReWrap only needs to care about it's own immediate wrapping. It does not need to
+	// check if it's underlying type implements ReWrapper.
 	ReWrap(T) T
 	// Unwrap must return a T that is unwrapped compared to the ReWrapper.
 	// This is providing access to the inner-T
