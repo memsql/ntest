@@ -54,10 +54,6 @@ func (t loggerT[ET]) Logf(format string, args ...interface{}) {
 
 // ReWrap implements ReWrapper to recreate loggerT with fresh T
 func (t loggerT[ET]) ReWrap(newT T) T {
-	if reWrapper, ok := t.T.(ReWrapper); ok {
-		rewrapped := reWrapper.ReWrap(newT)
-		return ReplaceLogger(rewrapped, t.logger)
-	}
 	return ReplaceLogger(newT, t.logger)
 }
 
@@ -116,10 +112,11 @@ func (ht *helperTracker) isHelper(funcName string) bool {
 	return ok
 }
 
-// bufferedLoggerT extends loggerT with helper tracking for buffered logging
+// bufferedLoggerT wraps T and adds helper tracking for buffered logging
 type bufferedLoggerT[ET T] struct {
-	loggerT[ET]
+	T
 	helperTracker *helperTracker
+	loggerFunc    func(string)
 }
 
 type bufferedLogEntry struct {
@@ -173,8 +170,7 @@ func createBufferedLoggerWithHelperTracking[ET T](t ET, helperTracker *helperTra
 			frame, more := frames.Next()
 
 			// Skip internal logger functions and marked helpers
-			if !helperTracker.isHelper(frame.Function) &&
-				!strings.Contains(frame.Function, "loggerT[") {
+			if !helperTracker.isHelper(frame.Function) {
 				file = frame.File
 				line = frame.Line
 				// Get just the filename, not the full path
@@ -229,17 +225,43 @@ func BufferedLogger[ET T](t ET) T {
 	loggerFunc := createBufferedLoggerWithHelperTracking(t, helperTracker)
 
 	wrapped := &bufferedLoggerT[ET]{
-		loggerT:       *replaceLogger(t, loggerFunc),
+		T:             t,
 		helperTracker: helperTracker,
+		loggerFunc:    loggerFunc,
 	}
 
 	return wrapped
 }
 
+// Log method for bufferedLoggerT that uses the buffered logger function
+func (bl *bufferedLoggerT[ET]) Log(args ...interface{}) {
+	bl.Helper() // Call our own Helper method to track this as a helper
+	line := fmt.Sprintln(args...)
+	message := line[0 : len(line)-1]
+	bl.loggerFunc(message)
+}
+
+// Logf method for bufferedLoggerT that uses the buffered logger function
+func (bl *bufferedLoggerT[ET]) Logf(format string, args ...interface{}) {
+	bl.Helper() // Call our own Helper method to track this as a helper
+	message := fmt.Sprintf(format, args...)
+	bl.loggerFunc(message)
+}
+
 // Helper method for bufferedLoggerT that tracks helpers
-func (t bufferedLoggerT[ET]) Helper() {
+func (bl *bufferedLoggerT[ET]) Helper() {
 	// Mark the caller as a helper in our tracker
-	t.helperTracker.markHelper()
+	bl.helperTracker.markHelper()
 	// Also call the underlying T's Helper method
-	t.T.Helper()
+	bl.T.Helper()
+}
+
+// ReWrap implements ReWrapper to recreate bufferedLoggerT with fresh T
+func (bl *bufferedLoggerT[ET]) ReWrap(newT T) T {
+	return BufferedLogger(newT)
+}
+
+// Unwrap implements ReWrapper to return the wrapped T
+func (bl *bufferedLoggerT[ET]) Unwrap() T {
+	return bl.T
 }
