@@ -37,9 +37,9 @@ func TestPrefixLogger(t *testing.T) {
 	t.Log("Logging formatted message")
 	extraDetail.Logf("formatted '%s'", "quoted")
 
-	t.Logf("Captured %d log entries", len(caught))
+	t.Logf("Captured % 3d log entries", len(caught))
 	for i, entry := range caught {
-		t.Logf("Entry %d: %s", i, entry)
+		t.Logf("Entry % 3d: %s", i, entry)
 	}
 
 	require.Equal(t, 2, len(caught), "len caught")
@@ -160,7 +160,17 @@ func TestExtraDetailInsideRun(t *testing.T) {
 	var ran bool
 	success := ntest.Run(extraDetail, "inner", func(wrapped ntest.T) {
 		inner := mockT.getInner(wrapped.Name())
-		testLineNumberAccuracy(inner.real, wrapped, mockT, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
+		t.Logf("[run] wrapped is a %T", wrapped)
+		current := wrapped
+		for {
+			if reWrapper, ok := current.(ntest.ReWrapper); ok {
+				current = reWrapper.Unwrap()
+				t.Logf("[run] which unwraps to a %T", current)
+			}
+			break
+		}
+
+		testLineNumberAccuracy(mockT, wrapped, inner, true, true, "SUFFIX") // expect buffering, test should fail to check line numbers
 		ran = true
 	})
 	require.True(t, success)
@@ -196,7 +206,7 @@ func TestReplaceLogger_WithoutBufferedLogger_LineNumberAccuracy(t *testing.T) {
 
 	t.Logf("After logging, captured %d log entries", len(mockT.captured))
 	for i, entry := range mockT.captured {
-		t.Logf("Captured entry %d: %s", i, entry)
+		t.Logf("Captured entry % 3d: %s", i, entry)
 	}
 
 	// Check for correct line number - should report the lambda function line, not the user code line
@@ -252,7 +262,7 @@ func testLineNumberAccuracy(t ntest.T, logger ntest.T, mockT *mockedT, expectBuf
 
 	t.Logf("After logging, captured %d log entries", len(mockT.captured))
 	for i, entry := range mockT.captured {
-		t.Logf("Captured entry %d: %s", i, entry)
+		t.Logf("Captured entry % 3d: %s", i, entry)
 	}
 
 	if expectBuffering && !shouldFail {
@@ -270,7 +280,7 @@ func testLineNumberAccuracy(t ntest.T, logger ntest.T, mockT *mockedT, expectBuf
 	for _, entry := range mockT.captured {
 	Line:
 		for _, log := range strings.Split(entry, "\n") {
-			t.Logf("examining: %s", log)
+			buffer := fmt.Sprintf("examining: %s", log)
 			all := []string{
 				"Test message for line accuracy",
 				"logger_test.go:" + expectedLine,
@@ -278,17 +288,17 @@ func testLineNumberAccuracy(t ntest.T, logger ntest.T, mockT *mockedT, expectBuf
 			all = append(all, mustFind...)
 			for _, s := range all {
 				if !strings.Contains(log, s) {
-					t.Logf(" missing '%s'", s)
+					t.Logf("%s - missing '%s'", buffer, s)
 					continue Line
 				}
-				t.Logf(" found '%s'", s)
+				buffer += fmt.Sprintf(" - found '%s'", s)
 			}
 			if strings.Contains(log, "logger.go:") {
-				t.Logf(" uh-oh, also contains 'logger.go'")
+				t.Logf("%s - uh-oh, also contains 'logger.go'", buffer)
 				continue Line
 			}
 			found = true
-			t.Logf("✓ Found log message with correct line number: %s", log)
+			t.Logf("%s - ✓ Found everything", buffer)
 			break Line
 		}
 	}
@@ -380,12 +390,15 @@ func (m *mockedT) Skipf(format string, args ...interface{}) {
 func (m *mockedT) log(s string) {
 	_, file, line, _ := runtime.Caller(2)
 	file = filepath.Base(file)
-	m.captured = append(m.captured, fmt.Sprintf("%s:%d %s", file, line, s))
+	message := fmt.Sprintf("%s:%d %s", file, line, s)
+	m.captured = append(m.captured, message)
+	m.real.Logf("[mock] captured %s", message)
 }
 
 func (m *mockedT) Log(args ...interface{}) {
-	line := fmt.Sprintln(args...)
-	m.log(line)
+	message := fmt.Sprintln(args...)
+	m.log(message)
+	m.real.Logf("[mock] captured %s", message)
 }
 
 func (m *mockedT) Logf(format string, args ...interface{}) {
