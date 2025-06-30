@@ -205,37 +205,37 @@ func (bl *bufferedLoggerT[ET]) Logf(format string, args ...interface{}) {
 
 // Helper method for bufferedLoggerT that tracks helpers
 func (bl *bufferedLoggerT[ET]) Helper() {
-	// Mark the caller of Helper as a helper
-	bl.markHelper(0)
-	MarkHelpers(bl.T)
-}
+	bl.mu.Lock()
+	defer bl.mu.Unlock()
 
-// MarkHelpers examines the Unwrap layers for t, calling FlexHelper(2) on all
-// FlexHelper instances it finds. Call MarkHelper from inside your custom
-// Helper implementation. Unfortunately, *testing.T doesn't implement FlexHelper.
-func MarkHelpers(t T) {
-	// Walk the full wrapper chain and call FlexHelper on each level with the same frame number
-	current := t
-	skipFrames := 2 // Same skip frames for all levels
+	// Walk up the stack, skipping over any functions named "Helper"
+	// to find the actual caller that should be marked as a helper
+	const maxFrames = 32
+	pcs := make([]uintptr, maxFrames)
+	n := runtime.Callers(2, pcs) // Skip Helper and its caller
+	frames := runtime.CallersFrames(pcs[:n])
 
 	for {
-		if flexHelper, ok := current.(FlexHelper); ok {
-			flexHelper.FlexHelper(skipFrames)
-		}
-		if reWrapper, ok := current.(ReWrapper); ok {
-			current = reWrapper.Unwrap()
-			continue
-		}
-		return
-	}
-}
+		frame, more := frames.Next()
 
-// FlexHelper allows types that wrap T to properly propagate helper marking
-// through wrapper chains with correct stack frame skipping. In particular,
-// BufferedLogger uses FlexHelper to propagate .Helper() calls to underlying
-// (Unwrap) loggers using MarkHelpers.
-type FlexHelper interface {
-	FlexHelper(skipFrames int)
+		// Skip over functions named "Helper" to find the real caller
+		funcName := frame.Function
+		if funcName != "" && !strings.HasSuffix(funcName, ".Helper") {
+			// This is the actual caller we want to mark as a helper
+			if _, ok := bl.seen[frame.PC]; !ok {
+				bl.seen[frame.PC] = struct{}{}
+				bl.helpers[funcName] = struct{}{}
+			}
+			break
+		}
+
+		if !more {
+			break
+		}
+	}
+
+	// Propagate Helper call to wrapped T
+	bl.T.Helper()
 }
 
 // ReWrap implements ReWrapper to recreate bufferedLoggerT with fresh T
@@ -249,25 +249,6 @@ func (bl *bufferedLoggerT[ET]) Unwrap() T {
 }
 
 // Helper tracking methods for bufferedLoggerT
-func (bl *bufferedLoggerT[ET]) markHelper(skipFrames int) {
-	bl.mu.Lock()
-	defer bl.mu.Unlock()
-
-	// Get the caller's function name (the function that called Helper())
-	pc, _, _, ok := runtime.Caller(2 + skipFrames) // Skip markHelper, Helper/FlexHelper method, plus additional frames
-	if ok {
-		if _, ok := bl.seen[pc]; ok {
-			return
-		}
-		bl.seen[pc] = struct{}{}
-		frames := runtime.CallersFrames([]uintptr{pc})
-		frame, _ := frames.Next()
-		if frame.Function != "" {
-			bl.helpers[frame.Function] = struct{}{}
-		}
-	}
-}
-
 func (bl *bufferedLoggerT[ET]) isHelper(funcName string) bool {
 	bl.mu.RLock()
 	defer bl.mu.RUnlock()
