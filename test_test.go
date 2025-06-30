@@ -12,7 +12,7 @@ import (
 	"github.com/memsql/ntest"
 )
 
-func TestRun(t *testing.T) {
+func TestRunTest(t *testing.T) {
 	t.Parallel()
 	var called bool
 	ntest.RunTest(t,
@@ -46,9 +46,7 @@ func TestParallelMatrixExtraBuffered(t *testing.T) {
 	testParallelMatrix(ntest.ExtraDetailLogger(ntest.BufferedLogger(t), "TPMEB-"))
 }
 
-func testParallelMatrix(justT ntest.T) {
-	t, ok := justT.(runner)
-	require.True(justT, ok)
+func testParallelMatrix(t ntest.T) {
 	var mu sync.Mutex
 	name := t.Name()
 	doneA := make(chan struct{})
@@ -77,8 +75,8 @@ func testParallelMatrix(justT ntest.T) {
 			close(c)
 		},
 	)
-	t.Run("validate", func(t *testing.T) {
-		t.Parallel()
+	ntest.Run(t, "validate", func(t ntest.T) {
+		ntest.MustParallel(t)
 		select {
 		case <-doneA:
 		case <-time.After(time.Second * 5):
@@ -96,10 +94,7 @@ func testParallelMatrix(justT ntest.T) {
 	})
 }
 
-func testParallelMatrixLogger(justT ntest.T) {
-	t, ok := justT.(runner)
-	require.True(justT, ok)
-
+func testParallelMatrixLogger(t ntest.T) {
 	// Test that logger wrappers work with matrix testing (exercises ReWrap functionality)
 	t.Log("Testing logger wrapper functionality")
 	t.Logf("Logger wrapper test for type %T", t)
@@ -127,8 +122,8 @@ func testParallelMatrixLogger(justT ntest.T) {
 	)
 
 	// Wait for both subtests to complete
-	t.Run("validate", func(subT *testing.T) {
-		subT.Parallel()
+	ntest.Run(t, "validate", func(subT ntest.T) {
+		ntest.MustParallel(subT)
 		select {
 		case <-doneA:
 		case <-time.After(time.Second * 5):
@@ -143,7 +138,15 @@ func testParallelMatrixLogger(justT ntest.T) {
 }
 
 func TestMatrix(t *testing.T) {
-	t.Parallel()
+	testMatrix(t)
+}
+
+func BenchmarkMatrix(t *testing.B) {
+	testMatrix(t)
+}
+
+func testMatrix[ET ntest.T](t ET) {
+	ntest.Parallel(t)
 	testsRun := make(map[string]struct{})
 	ntest.RunMatrix(t,
 		func() int { return 7 },
@@ -153,15 +156,15 @@ func TestMatrix(t *testing.T) {
 				func(t ntest.T, _ int) string { return t.Name() },
 			),
 		},
-		func(t *testing.T, s string) {
+		func(t ET, s string) {
 			t.Logf("final func for %s", t.Name())
 			t.Logf("s = %s", s)
 			testsRun[s] = struct{}{}
 		},
 	)
 	assert.Equal(t, map[string]struct{}{
-		"TestMatrix/testA": {},
-		"TestMatrix/testB": {},
+		t.Name() + "/testA": {},
+		t.Name() + "/testB": {},
 	}, testsRun)
 }
 
@@ -197,8 +200,8 @@ func TestEmptyMatrix(t *testing.T) {
 	assert.True(t, mk.Failed())
 }
 
-// TestRunWithReWrap tests the RunWithReWrap functionality directly
-func TestRunWithReWrap(t *testing.T) {
+// TestRunWrapper tests the RunWithReWrap functionality directly
+func TestRunWrapper(t *testing.T) {
 	t.Parallel()
 
 	// Capture log output to verify layering is preserved
@@ -211,7 +214,7 @@ func TestRunWithReWrap(t *testing.T) {
 	logger := ntest.ExtraDetailLogger(captureLogger, "RWRW-")
 
 	var subTestRan bool
-	success := ntest.RunWithReWrap(logger, "rewrap-test", func(reWrapped ntest.T) {
+	success := ntest.Run(logger, "rewrap-test", func(reWrapped ntest.T) {
 		reWrapped.Log("This should be prefixed and timestamped")
 		reWrapped.Logf("Formatted message: %s", "test")
 		subTestRan = true
@@ -231,31 +234,4 @@ func TestRunWithReWrap(t *testing.T) {
 	assert.Contains(t, capturedLogs[1], "RWRW-", "Second message should have prefix")
 	assert.Contains(t, capturedLogs[1], "Formatted message: test", "Second message should contain formatted text")
 	assert.Regexp(t, `\d{2}:\d{2}:\d{2}`, capturedLogs[1], "Second message should have timestamp")
-}
-
-// TestAdjustSkipFramesForwarding tests that AdjustSkipFrames properly forwards to underlying types
-func TestAdjustSkipFramesForwarding(t *testing.T) {
-	t.Parallel()
-
-	// Create a chain: BufferedLogger wrapping another BufferedLogger
-	// This creates a scenario where skip frames need to be properly forwarded through the chain
-	inner := ntest.BufferedLogger(t)
-	outer := ntest.BufferedLogger(inner)
-
-	// Both should support AdjustSkipFrames
-	if adjuster, ok := outer.(interface{ AdjustSkipFrames(int) }); ok {
-		// This should forward through the chain without panicking
-		adjuster.AdjustSkipFrames(2)
-
-		// Verify we can still log without errors (indicating the chain is intact)
-		outer.Log("Test message through forwarded skip frames")
-		assert.True(t, true, "AdjustSkipFrames forwarding should not break the logger chain")
-	} else {
-		t.Error("BufferedLogger should implement AdjustSkipFrames")
-	}
-}
-
-type runner interface {
-	ntest.T
-	Run(string, func(*testing.T)) bool
 }
