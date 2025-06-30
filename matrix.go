@@ -25,7 +25,7 @@ import (
 //
 // The provided T must support Run()
 func RunParallelMatrix(t T, chain ...any) {
-	t.Parallel()
+	MustParallel(t)
 	runMatrixTest(t, true, chain)
 }
 
@@ -46,12 +46,6 @@ func RunMatrix(t T, chain ...any) {
 }
 
 func runMatrixTest(t T, parallel bool, chain []any) {
-	_, ok := t.(runner)
-	if !ok {
-		t.Logf("Run not supported by %T", t)
-		t.Fail()
-		return
-	}
 	matrix, before, after := breakChain(chain)
 	if matrix == nil {
 		t.Log("FAIL: matrix test requires a matrix")
@@ -63,15 +57,19 @@ func runMatrixTest(t T, parallel bool, chain []any) {
 	startTest = func(t T, matrix map[string]nject.Provider, before []any, after []any) {
 		for name, subChain := range matrix {
 			subChain := subChain
-			RunWithReWrap(t, name, func(reWrapped T) {
+			Run(t, name, func(reWrapped T) {
 				if parallel {
-					reWrapped.Parallel()
+					Parallel(reWrapped)
 				}
 				testingT := func(tInner T) []any {
-					if tt, ok := tInner.(*testing.T); ok {
+					switch tt := tInner.(type) {
+					case *testing.T:
 						return []any{nject.Provide("testing.T", func() *testing.T { return tt })}
+					case *testing.B:
+						return []any{nject.Provide("testing.B", func() *testing.B { return tt })}
+					default:
+						return []any{}
 					}
-					return []any{}
 				}
 				matrix, newBefore, newAfter := breakChain(after)
 				if matrix == nil {
