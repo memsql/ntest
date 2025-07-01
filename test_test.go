@@ -1,6 +1,7 @@
 package ntest_test
 
 import (
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,14 @@ import (
 
 	"github.com/memsql/ntest"
 )
+
+var timeout = func() time.Duration {
+	// Use longer timeout on macOS due to CI resource contention
+	if runtime.GOOS == "darwin" {
+		return time.Minute
+	}
+	return time.Second
+}()
 
 func TestRunTest(t *testing.T) {
 	t.Parallel()
@@ -77,20 +86,40 @@ func testParallelMatrix(t ntest.T) {
 	)
 	ntest.Run(t, "validate", func(t ntest.T) {
 		ntest.MustParallel(t)
+
+		t.Logf("Waiting for testA completion...")
 		select {
 		case <-doneA:
-		case <-time.After(time.Second * 5):
-			require.False(t, true, "timeout")
+			t.Logf("testA completed successfully")
+		case <-time.After(timeout):
+			mu.Lock()
+			t.Logf("Current completed tests: %+v", testsRun)
+			mu.Unlock()
+			require.False(t, true, "timeout waiting for testA after %v", timeout)
 		}
+
+		t.Logf("Waiting for testB completion...")
 		select {
 		case <-doneB:
-		case <-time.After(time.Second * 5):
-			require.False(t, true, "timeout")
+			t.Logf("testB completed successfully")
+		case <-time.After(timeout):
+			mu.Lock()
+			t.Logf("Current completed tests: %+v", testsRun)
+			mu.Unlock()
+			require.False(t, true, "timeout waiting for testB after %v", timeout)
 		}
+
+		mu.Lock()
+		finalTests := make(map[string]struct{})
+		for k, v := range testsRun {
+			finalTests[k] = v
+		}
+		mu.Unlock()
+
 		assert.Equal(t, map[string]struct{}{
 			name + "/testA": {},
 			name + "/testB": {},
-		}, testsRun)
+		}, finalTests)
 	})
 }
 
@@ -124,16 +153,19 @@ func testParallelMatrixLogger(t ntest.T) {
 	// Wait for both subtests to complete
 	ntest.Run(t, "validate", func(subT ntest.T) {
 		ntest.MustParallel(subT)
+		t.Log("waiting for doneA")
 		select {
 		case <-doneA:
-		case <-time.After(time.Second * 5):
+		case <-time.After(timeout):
 			require.False(subT, true, "loggerA timeout")
 		}
+		t.Log("waiting for doneB")
 		select {
 		case <-doneB:
-		case <-time.After(time.Second * 5):
+		case <-time.After(timeout):
 			require.False(subT, true, "loggerB timeout")
 		}
+		t.Log("all done")
 	})
 }
 
