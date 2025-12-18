@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const failBeforeTimeout = 10 * time.Second
+
 type loggerT[ET T] struct {
 	T
 	logger func(string)
@@ -115,7 +117,7 @@ func BufferedLogger[ET T](t ET) T {
 	}
 
 	// Register cleanup function to output buffered logs if test failed
-	t.Cleanup(func() {
+	flush := func() {
 		wrapped.entryLock.Lock()
 		defer wrapped.entryLock.Unlock()
 		wrapped.cleanupCalled = true
@@ -132,11 +134,28 @@ func BufferedLogger[ET T](t ET) T {
 			}
 			_, _ = buffer.Write([]byte("=== End Buffered Log Output ===\n"))
 			t.Log(buffer.String())
+			wrapped.entries = make([]bufferedLogEntry, 0)
 		} else {
 			t.Logf("dropping %d log entries (test passed)", len(wrapped.entries))
 		}
-	})
-
+	}
+	t.Cleanup(flush)
+	if deadline, ok := callDeadline(t); ok {
+		timer := time.NewTimer(time.Until(deadline) - failBeforeTimeout)
+		done := make(chan struct{})
+		t.Cleanup(func() {
+			close(done)
+		})
+		go func() {
+			select {
+			case <-timer.C:
+				t.Error("test is about to time out, flushing logs")
+				flush()
+			case <-done:
+				timer.Stop()
+			}
+		}()
+	}
 	return wrapped
 }
 
