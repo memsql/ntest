@@ -1,6 +1,9 @@
 package ntest
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // T is subset of what *testing.T provides.
 //
@@ -8,6 +11,7 @@ import "testing"
 //
 //	.Run - not present in ginkgo.GinkgoT()
 //	.Parallel - not present in *testing.B
+//	.Deadline - not present in *testing.B or ginkgo.GinkgoT()
 type T interface {
 	Cleanup(func())
 	Setenv(key, value string)
@@ -31,6 +35,7 @@ var (
 	_ runnerB  = (*testing.B)(nil)
 	_ runner   = (*testing.T)(nil)
 	_ parallel = (*testing.T)(nil)
+	_ deadline = (*testing.T)(nil)
 )
 
 type runner interface {
@@ -64,6 +69,29 @@ func callParallel(t T) bool {
 			continue
 		}
 		return false
+	}
+}
+
+type deadline interface {
+	T
+	Deadline() (time.Time, bool)
+}
+
+// callDeadline returns false if Deadline isn't supported or if
+// Deadline() returns false
+func callDeadline(t T) (time.Time, bool) {
+	t.Helper()
+	// Walk down the wrapper chain to find something that supports Deadline
+	current := t
+	for {
+		switch tt := current.(type) {
+		case deadline:
+			return tt.Deadline()
+		case ReWrapper:
+			current = tt.Unwrap()
+			continue
+		}
+		return time.Time{}, false
 	}
 }
 
