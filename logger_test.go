@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -446,4 +447,17 @@ func (m *mockedT) Parallel() {
 
 func (m *mockedT) setFailed() {
 	m.failed = true
+}
+
+func TestTimeoutFlush(t *testing.T) {
+	if os.Getenv("RUN_TIMEOUT_TEST") != "true" {
+		t.Skip("set RUN_TIMEOUT_TEST=true to run this test. Also use a short -timeout")
+	}
+	if _, ok := os.LookupEnv("NTEST_BUFFERING"); ok {
+		t.Setenv("NTEST_BUFFERING", "true")
+	}
+	buffered := ntest.BufferedLogger(t)
+	buffered.Log("buffered hi")
+	time.Sleep(11 * time.Minute)
+	buffered.Log("bye")
 }
