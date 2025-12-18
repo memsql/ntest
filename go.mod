@@ -1,6 +1,6 @@
 module github.com/memsql/ntest
 
-go 1.18
+go 1.19
 
 require (
 	github.com/muir/nject/v2 v2.1.0
