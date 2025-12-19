@@ -1,7 +1,13 @@
 name: golangci-lint
-on: [push ] 
+
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ "**" ]
 
 jobs:
   golangci:
